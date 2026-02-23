@@ -1,12 +1,9 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::gamma::{
-    self,
-    types::request::TeamsRequest,
-};
+use polymarket_client_sdk::gamma::{self, types::request::TeamsRequest};
 
+use crate::output::sports::{print_sport_types, print_sports_table, print_teams_table};
 use crate::output::{OutputFormat, print_json};
-use crate::output::sports::{print_sports_table, print_sport_types, print_teams_table};
 
 #[derive(Args)]
 pub struct SportsArgs {
@@ -46,11 +43,7 @@ pub enum SportsCommand {
     },
 }
 
-pub async fn execute(
-    client: &gamma::Client,
-    args: SportsArgs,
-    output: OutputFormat,
-) -> Result<()> {
+pub async fn execute(client: &gamma::Client, args: SportsArgs, output: OutputFormat) -> Result<()> {
     match args.command {
         SportsCommand::List => {
             let sports = client.sports().await?;

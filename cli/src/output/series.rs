@@ -56,10 +56,26 @@ pub fn print_series_detail(s: &Series) {
     detail_field!(rows, "Slug", s.slug.clone().unwrap_or_default());
     detail_field!(rows, "Type", s.series_type.clone().unwrap_or_default());
     detail_field!(rows, "Recurrence", s.recurrence.clone().unwrap_or_default());
-    detail_field!(rows, "Description", s.description.clone().unwrap_or_default());
-    detail_field!(rows, "Volume", s.volume.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Liquidity", s.liquidity.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Volume (24hr)", s.volume_24hr.map(format_decimal).unwrap_or_default());
+    detail_field!(
+        rows,
+        "Description",
+        s.description.clone().unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Volume",
+        s.volume.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Liquidity",
+        s.liquidity.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Volume (24hr)",
+        s.volume_24hr.map(format_decimal).unwrap_or_default()
+    );
     detail_field!(rows, "Status", series_status(s).into());
     detail_field!(
         rows,
@@ -69,9 +85,21 @@ pub fn print_series_detail(s: &Series) {
             .map(|e| e.len().to_string())
             .unwrap_or_default()
     );
-    detail_field!(rows, "Comment Count", s.comment_count.map(|c| c.to_string()).unwrap_or_default());
-    detail_field!(rows, "Start Date", s.start_date.map(|d| d.to_string()).unwrap_or_default());
-    detail_field!(rows, "Created At", s.created_at.map(|d| d.to_string()).unwrap_or_default());
+    detail_field!(
+        rows,
+        "Comment Count",
+        s.comment_count.map(|c| c.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Start Date",
+        s.start_date.map(|d| d.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Created At",
+        s.created_at.map(|d| d.to_string()).unwrap_or_default()
+    );
     detail_field!(
         rows,
         "Tags",

@@ -1,4 +1,6 @@
-use polymarket_client_sdk::gamma::types::response::{SportsMarketTypesResponse, SportsMetadata, Team};
+use polymarket_client_sdk::gamma::types::response::{
+    SportsMarketTypesResponse, SportsMetadata, Team,
+};
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 

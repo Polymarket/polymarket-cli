@@ -73,11 +73,31 @@ pub fn print_tag_detail(t: &Tag) {
     detail_field!(rows, "ID", t.id.clone());
     detail_field!(rows, "Label", t.label.clone().unwrap_or_default());
     detail_field!(rows, "Slug", t.slug.clone().unwrap_or_default());
-    detail_field!(rows, "Carousel", t.is_carousel.map(|v| v.to_string()).unwrap_or_default());
-    detail_field!(rows, "Force Show", t.force_show.map(|v| v.to_string()).unwrap_or_default());
-    detail_field!(rows, "Force Hide", t.force_hide.map(|v| v.to_string()).unwrap_or_default());
-    detail_field!(rows, "Created At", t.created_at.map(|d| d.to_string()).unwrap_or_default());
-    detail_field!(rows, "Updated At", t.updated_at.map(|d| d.to_string()).unwrap_or_default());
+    detail_field!(
+        rows,
+        "Carousel",
+        t.is_carousel.map(|v| v.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Force Show",
+        t.force_show.map(|v| v.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Force Hide",
+        t.force_hide.map(|v| v.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Created At",
+        t.created_at.map(|d| d.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Updated At",
+        t.updated_at.map(|d| d.to_string()).unwrap_or_default()
+    );
 
     print_detail_table(rows);
 }

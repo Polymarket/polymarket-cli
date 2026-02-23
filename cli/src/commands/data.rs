@@ -1,20 +1,19 @@
+use super::{parse_address, parse_condition_id};
+use crate::output::OutputFormat;
+use crate::output::data::{
+    print_activity, print_builder_leaderboard, print_builder_volume, print_closed_positions,
+    print_holders, print_leaderboard, print_live_volume, print_open_interest, print_positions,
+    print_traded, print_trades, print_value,
+};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::data::{
     self,
     types::request::{
         ActivityRequest, BuilderLeaderboardRequest, BuilderVolumeRequest, ClosedPositionsRequest,
-        HoldersRequest, LiveVolumeRequest, OpenInterestRequest, PositionsRequest,
-        TraderLeaderboardRequest, TradesRequest, TradedRequest, ValueRequest,
+        HoldersRequest, LiveVolumeRequest, OpenInterestRequest, PositionsRequest, TradedRequest,
+        TraderLeaderboardRequest, TradesRequest, ValueRequest,
     },
-};
-use polymarket_client_sdk::types::Address;
-
-use crate::output::OutputFormat;
-use crate::output::data::{
-    print_activity, print_builder_leaderboard, print_builder_volume, print_closed_positions,
-    print_holders, print_leaderboard, print_live_volume, print_open_interest, print_positions,
-    print_traded, print_trades, print_value,
 };
 
 #[derive(Args)]
@@ -191,17 +190,8 @@ impl From<OrderBy> for polymarket_client_sdk::data::types::LeaderboardOrderBy {
     }
 }
 
-fn parse_address(s: &str) -> Result<Address> {
-    s.parse()
-        .map_err(|_| anyhow::anyhow!("Invalid address: must be a 0x-prefixed hex address"))
-}
-
 #[allow(clippy::too_many_lines)]
-pub async fn execute(
-    client: &data::Client,
-    args: DataArgs,
-    output: OutputFormat,
-) -> Result<()> {
+pub async fn execute(client: &data::Client, args: DataArgs, output: OutputFormat) -> Result<()> {
     match args.command {
         DataCommand::Positions {
             address,
@@ -282,9 +272,7 @@ pub async fn execute(
         }
 
         DataCommand::Holders { market, limit } => {
-            let cid = market
-                .parse()
-                .map_err(|_| anyhow::anyhow!("Invalid condition ID: must be a 0x-prefixed 32-byte hex"))?;
+            let cid = parse_condition_id(&market)?;
             let request = HoldersRequest::builder()
                 .markets(vec![cid])
                 .limit(limit)?
@@ -295,12 +283,8 @@ pub async fn execute(
         }
 
         DataCommand::OpenInterest { market } => {
-            let cid = market
-                .parse()
-                .map_err(|_| anyhow::anyhow!("Invalid condition ID: must be a 0x-prefixed 32-byte hex"))?;
-            let request = OpenInterestRequest::builder()
-                .markets(vec![cid])
-                .build();
+            let cid = parse_condition_id(&market)?;
+            let request = OpenInterestRequest::builder().markets(vec![cid]).build();
 
             let oi = client.open_interest(&request).await?;
             print_open_interest(&oi, &output);

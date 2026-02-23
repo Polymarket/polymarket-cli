@@ -75,16 +75,50 @@ pub fn print_market_detail(m: &Market) {
         "Prices",
         m.outcome_prices
             .as_ref()
-            .map(|p| p.iter().map(|v| format!("{v:.4}")).collect::<Vec<_>>().join(", "))
+            .map(|p| p
+                .iter()
+                .map(|v| format!("{v:.4}"))
+                .collect::<Vec<_>>()
+                .join(", "))
             .unwrap_or_default()
     );
-    detail_field!(rows, "Volume", m.volume_num.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Liquidity", m.liquidity_num.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Volume (24hr)", m.volume_24hr.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Best Bid", m.best_bid.map(|v| format!("{v:.4}")).unwrap_or_default());
-    detail_field!(rows, "Best Ask", m.best_ask.map(|v| format!("{v:.4}")).unwrap_or_default());
-    detail_field!(rows, "Spread", m.spread.map(|v| format!("{v:.4}")).unwrap_or_default());
-    detail_field!(rows, "Last Trade", m.last_trade_price.map(|v| format!("{v:.4}")).unwrap_or_default());
+    detail_field!(
+        rows,
+        "Volume",
+        m.volume_num.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Liquidity",
+        m.liquidity_num.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Volume (24hr)",
+        m.volume_24hr.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Best Bid",
+        m.best_bid.map(|v| format!("{v:.4}")).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Best Ask",
+        m.best_ask.map(|v| format!("{v:.4}")).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Spread",
+        m.spread.map(|v| format!("{v:.4}")).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Last Trade",
+        m.last_trade_price
+            .map(|v| format!("{v:.4}"))
+            .unwrap_or_default()
+    );
     detail_field!(rows, "Status", market_status(m).into());
     detail_field!(
         rows,
@@ -96,13 +130,33 @@ pub fn print_market_detail(m: &Market) {
         "CLOB Token IDs",
         m.clob_token_ids
             .as_ref()
-            .map(|ids| ids.iter().map(|id| format!("{id}")).collect::<Vec<_>>().join(", "))
+            .map(|ids| ids
+                .iter()
+                .map(|id| format!("{id}"))
+                .collect::<Vec<_>>()
+                .join(", "))
             .unwrap_or_default()
     );
-    detail_field!(rows, "Start Date", m.start_date.map(|d| d.to_string()).unwrap_or_default());
-    detail_field!(rows, "End Date", m.end_date.map(|d| d.to_string()).unwrap_or_default());
-    detail_field!(rows, "Description", m.description.clone().unwrap_or_default());
-    detail_field!(rows, "Resolution Source", m.resolution_source.clone().unwrap_or_default());
+    detail_field!(
+        rows,
+        "Start Date",
+        m.start_date.map(|d| d.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "End Date",
+        m.end_date.map(|d| d.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Description",
+        m.description.clone().unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Resolution Source",
+        m.resolution_source.clone().unwrap_or_default()
+    );
 
     print_detail_table(rows);
 }

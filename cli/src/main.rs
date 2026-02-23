@@ -9,7 +9,6 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use output::OutputFormat;
-use polymarket_client_sdk::{bridge, data, gamma};
 
 #[derive(Parser)]
 #[command(name = "polymarket", about = "Polymarket CLI", version)]
@@ -18,14 +17,14 @@ struct Cli {
     command: Commands,
 
     /// Output format: table or json
-    #[arg(long, global = true, default_value = "table")]
+    #[arg(short, long, global = true, default_value = "table")]
     output: OutputFormat,
 
-    /// Private key for wallet authentication (overrides env var and config file)
+    /// Private key (overrides env var and config file)
     #[arg(long, global = true)]
     private_key: Option<String>,
 
-    /// Signature type: eoa, proxy, or gnosis-safe (default: proxy)
+    /// Signature type: eoa, proxy, or gnosis-safe
     #[arg(long, global = true)]
     signature_type: Option<String>,
 }
@@ -78,19 +77,65 @@ async fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+#[allow(clippy::too_many_lines)]
 async fn run(cli: Cli) -> anyhow::Result<()> {
-    let gamma_client = gamma::Client::default();
-    let data_client = data::Client::default();
-    let bridge_client = bridge::Client::default();
-
     match cli.command {
-        Commands::Markets(args) => commands::markets::execute(&gamma_client, args, cli.output).await,
-        Commands::Events(args) => commands::events::execute(&gamma_client, args, cli.output).await,
-        Commands::Tags(args) => commands::tags::execute(&gamma_client, args, cli.output).await,
-        Commands::Series(args) => commands::series::execute(&gamma_client, args, cli.output).await,
-        Commands::Comments(args) => commands::comments::execute(&gamma_client, args, cli.output).await,
-        Commands::Profiles(args) => commands::profiles::execute(&gamma_client, args, cli.output).await,
-        Commands::Sports(args) => commands::sports::execute(&gamma_client, args, cli.output).await,
+        Commands::Markets(args) => {
+            commands::markets::execute(
+                &polymarket_client_sdk::gamma::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
+        Commands::Events(args) => {
+            commands::events::execute(
+                &polymarket_client_sdk::gamma::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
+        Commands::Tags(args) => {
+            commands::tags::execute(
+                &polymarket_client_sdk::gamma::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
+        Commands::Series(args) => {
+            commands::series::execute(
+                &polymarket_client_sdk::gamma::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
+        Commands::Comments(args) => {
+            commands::comments::execute(
+                &polymarket_client_sdk::gamma::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
+        Commands::Profiles(args) => {
+            commands::profiles::execute(
+                &polymarket_client_sdk::gamma::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
+        Commands::Sports(args) => {
+            commands::sports::execute(
+                &polymarket_client_sdk::gamma::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
         Commands::Clob(args) => {
             commands::clob::execute(
                 args,
@@ -100,11 +145,29 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
             )
             .await
         }
-        Commands::Data(args) => commands::data::execute(&data_client, args, cli.output).await,
-        Commands::Bridge(args) => commands::bridge::execute(&bridge_client, args, cli.output).await,
-        Commands::Wallet(args) => commands::wallet::execute(args, cli.output, cli.private_key.as_deref()),
+        Commands::Data(args) => {
+            commands::data::execute(
+                &polymarket_client_sdk::data::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
+        Commands::Bridge(args) => {
+            commands::bridge::execute(
+                &polymarket_client_sdk::bridge::Client::default(),
+                args,
+                cli.output,
+            )
+            .await
+        }
+        Commands::Wallet(args) => {
+            commands::wallet::execute(args, &cli.output, cli.private_key.as_deref())
+        }
         Commands::Status => {
-            let status = gamma_client.status().await?;
+            let status = polymarket_client_sdk::gamma::Client::default()
+                .status()
+                .await?;
             match cli.output {
                 OutputFormat::Json => {
                     println!("{}", serde_json::json!({"status": status}));

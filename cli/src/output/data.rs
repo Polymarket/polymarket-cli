@@ -6,12 +6,12 @@ use serde_json::json;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{format_decimal, truncate, OutputFormat};
+use super::{OutputFormat, format_decimal, truncate};
 
 fn format_market(m: &Market) -> String {
     match m {
         Market::Global => "Global".into(),
-        Market::Market(id) => format!("{id}"),
+        Market::Market(id) => id.to_string(),
         _ => "Unknown".into(),
     }
 }
@@ -71,8 +71,8 @@ pub fn print_positions(positions: &[Position], output: &OutputFormat) {
                         "percent_pnl": p.percent_pnl.to_string(),
                         "realized_pnl": p.realized_pnl.to_string(),
                         "cur_price": p.cur_price.to_string(),
-                        "condition_id": format!("{}", p.condition_id),
-                        "proxy_wallet": format!("{}", p.proxy_wallet),
+                        "condition_id": p.condition_id.to_string(),
+                        "proxy_wallet": p.proxy_wallet.to_string(),
                         "redeemable": p.redeemable,
                         "mergeable": p.mergeable,
                     })
@@ -128,8 +128,8 @@ pub fn print_closed_positions(positions: &[ClosedPosition], output: &OutputForma
                         "total_bought": p.total_bought.to_string(),
                         "realized_pnl": p.realized_pnl.to_string(),
                         "cur_price": p.cur_price.to_string(),
-                        "condition_id": format!("{}", p.condition_id),
-                        "proxy_wallet": format!("{}", p.proxy_wallet),
+                        "condition_id": p.condition_id.to_string(),
+                        "proxy_wallet": p.proxy_wallet.to_string(),
                         "timestamp": p.timestamp,
                     })
                 })
@@ -158,7 +158,7 @@ pub fn print_value(values: &[Value], output: &OutputFormat) {
             let rows: Vec<Row> = values
                 .iter()
                 .map(|v| Row {
-                    user: truncate(&format!("{}", v.user), 14),
+                    user: truncate(&v.user.to_string(), 14),
                     value: format_decimal(v.value),
                 })
                 .collect();
@@ -168,7 +168,7 @@ pub fn print_value(values: &[Value], output: &OutputFormat) {
         OutputFormat::Json => {
             let data: Vec<_> = values
                 .iter()
-                .map(|v| json!({"user": format!("{}", v.user), "value": v.value.to_string()}))
+                .map(|v| json!({"user": v.user.to_string(), "value": v.value.to_string()}))
                 .collect();
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
         }
@@ -184,7 +184,7 @@ pub fn print_traded(t: &Traded, output: &OutputFormat) {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json!({
-                    "user": format!("{}", t.user),
+                    "user": t.user.to_string(),
                     "traded": t.traded,
                 }))
                 .unwrap()
@@ -219,7 +219,7 @@ pub fn print_trades(trades: &[Trade], output: &OutputFormat) {
                 .iter()
                 .map(|t| Row {
                     title: truncate(&t.title, 40),
-                    side: format!("{}", t.side),
+                    side: t.side.to_string(),
                     outcome: t.outcome.clone(),
                     size: format!("{:.2}", t.size),
                     price: format!("{:.4}", t.price),
@@ -235,15 +235,15 @@ pub fn print_trades(trades: &[Trade], output: &OutputFormat) {
                     json!({
                         "title": t.title,
                         "slug": t.slug,
-                        "side": format!("{}", t.side),
+                        "side": t.side.to_string(),
                         "outcome": t.outcome,
                         "outcome_index": t.outcome_index,
                         "size": t.size.to_string(),
                         "price": t.price.to_string(),
                         "timestamp": t.timestamp,
-                        "condition_id": format!("{}", t.condition_id),
-                        "proxy_wallet": format!("{}", t.proxy_wallet),
-                        "transaction_hash": format!("{}", t.transaction_hash),
+                        "condition_id": t.condition_id.to_string(),
+                        "proxy_wallet": t.proxy_wallet.to_string(),
+                        "transaction_hash": t.transaction_hash.to_string(),
                     })
                 })
                 .collect();
@@ -277,11 +277,11 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) {
             let rows: Vec<Row> = activity
                 .iter()
                 .map(|a| Row {
-                    activity_type: format!("{}", a.activity_type),
+                    activity_type: a.activity_type.to_string(),
                     title: truncate(a.title.as_deref().unwrap_or("—"), 35),
                     size: format!("{:.2}", a.size),
                     usdc_size: format_decimal(a.usdc_size),
-                    tx: truncate(&format!("{}", a.transaction_hash), 14),
+                    tx: truncate(&a.transaction_hash.to_string(), 14),
                 })
                 .collect();
             let table = Table::new(rows).with(Style::rounded()).to_string();
@@ -292,13 +292,13 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) {
                 .iter()
                 .map(|a| {
                     json!({
-                        "activity_type": format!("{}", a.activity_type),
+                        "activity_type": a.activity_type.to_string(),
                         "title": a.title,
                         "size": a.size.to_string(),
                         "usdc_size": a.usdc_size.to_string(),
                         "timestamp": a.timestamp,
-                        "transaction_hash": format!("{}", a.transaction_hash),
-                        "proxy_wallet": format!("{}", a.proxy_wallet),
+                        "transaction_hash": a.transaction_hash.to_string(),
+                        "proxy_wallet": a.proxy_wallet.to_string(),
                     })
                 })
                 .collect();
@@ -331,7 +331,7 @@ pub fn print_holders(meta_holders: &[MetaHolder], output: &OutputFormat) {
                 .iter()
                 .flat_map(|mh| {
                     mh.holders.iter().map(|h| Row {
-                        wallet: truncate(&format!("{}", h.proxy_wallet), 14),
+                        wallet: truncate(&h.proxy_wallet.to_string(), 14),
                         name: h
                             .name
                             .as_deref()
@@ -355,7 +355,7 @@ pub fn print_holders(meta_holders: &[MetaHolder], output: &OutputFormat) {
                         .iter()
                         .map(|h| {
                             json!({
-                                "proxy_wallet": format!("{}", h.proxy_wallet),
+                                "proxy_wallet": h.proxy_wallet.to_string(),
                                 "name": h.name,
                                 "pseudonym": h.pseudonym,
                                 "amount": h.amount.to_string(),
@@ -363,7 +363,7 @@ pub fn print_holders(meta_holders: &[MetaHolder], output: &OutputFormat) {
                             })
                         })
                         .collect();
-                    json!({"token": format!("{}", mh.token), "holders": holders})
+                    json!({"token": mh.token.to_string(), "holders": holders})
                 })
                 .collect();
             println!("{}", serde_json::to_string_pretty(&data).unwrap());
@@ -492,7 +492,7 @@ pub fn print_leaderboard(entries: &[TraderLeaderboardEntry], output: &OutputForm
                 .map(|e| {
                     json!({
                         "rank": e.rank,
-                        "proxy_wallet": format!("{}", e.proxy_wallet),
+                        "proxy_wallet": e.proxy_wallet.to_string(),
                         "user_name": e.user_name,
                         "pnl": e.pnl.to_string(),
                         "volume": e.vol.to_string(),

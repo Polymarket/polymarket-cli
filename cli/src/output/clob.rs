@@ -1,21 +1,20 @@
 use polymarket_client_sdk::auth::Credentials;
-use polymarket_client_sdk::types::Decimal;
 use polymarket_client_sdk::clob::types::response::{
     ApiKeysResponse, BalanceAllowanceResponse, BanStatusResponse, CancelOrdersResponse,
     CurrentRewardResponse, FeeRateResponse, GeoblockResponse, LastTradePriceResponse,
-    LastTradesPricesResponse, MarketRewardResponse, MarketResponse, MidpointResponse,
+    LastTradesPricesResponse, MarketResponse, MarketRewardResponse, MidpointResponse,
     MidpointsResponse, NegRiskResponse, NotificationResponse, OpenOrderResponse,
-    OrderBookSummaryResponse, OrderScoringResponse, OrdersScoringResponse, Page,
-    PostOrderResponse, PriceHistoryResponse, PriceResponse, PricesResponse,
-    RewardsPercentagesResponse, SimplifiedMarketResponse, SpreadResponse, SpreadsResponse,
-    TickSizeResponse, TotalUserEarningResponse, TradeResponse, UserEarningResponse,
-    UserRewardsEarningResponse,
+    OrderBookSummaryResponse, OrderScoringResponse, OrdersScoringResponse, Page, PostOrderResponse,
+    PriceHistoryResponse, PriceResponse, PricesResponse, RewardsPercentagesResponse,
+    SimplifiedMarketResponse, SpreadResponse, SpreadsResponse, TickSizeResponse,
+    TotalUserEarningResponse, TradeResponse, UserEarningResponse, UserRewardsEarningResponse,
 };
+use polymarket_client_sdk::types::Decimal;
 use serde_json::json;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{format_decimal, truncate, OutputFormat};
+use super::{OutputFormat, format_decimal, truncate};
 
 // --- Ok ---
 
@@ -394,9 +393,7 @@ pub fn print_clob_market(result: &MarketResponse, output: &OutputFormat) {
                 ["Slug".into(), result.market_slug.clone()],
                 [
                     "Condition ID".into(),
-                    result
-                        .condition_id
-                        .map_or("—".into(), |c| c.to_string()),
+                    result.condition_id.map_or("—".into(), |c| c.to_string()),
                 ],
                 ["Active".into(), result.active.to_string()],
                 ["Closed".into(), result.closed.to_string()],
@@ -408,16 +405,11 @@ pub fn print_clob_market(result: &MarketResponse, output: &OutputFormat) {
                     "Min Order Size".into(),
                     result.minimum_order_size.to_string(),
                 ],
-                [
-                    "Min Tick Size".into(),
-                    result.minimum_tick_size.to_string(),
-                ],
+                ["Min Tick Size".into(), result.minimum_tick_size.to_string()],
                 ["Neg Risk".into(), result.neg_risk.to_string()],
                 [
                     "End Date".into(),
-                    result
-                        .end_date_iso
-                        .map_or("—".into(), |d| d.to_rfc3339()),
+                    result.end_date_iso.map_or("—".into(), |d| d.to_rfc3339()),
                 ],
             ];
             for token in &result.tokens {
@@ -599,7 +591,9 @@ pub fn print_price_history(result: &PriceHistoryResponse, output: &OutputFormat)
                 .iter()
                 .map(|p| Row {
                     timestamp: chrono::DateTime::from_timestamp(p.t, 0)
-                        .map_or(p.t.to_string(), |dt| dt.format("%Y-%m-%d %H:%M").to_string()),
+                        .map_or(p.t.to_string(), |dt| {
+                            dt.format("%Y-%m-%d %H:%M").to_string()
+                        }),
                     price: p.p.to_string(),
                 })
                 .collect();
@@ -625,7 +619,10 @@ pub fn print_server_time(timestamp: i64, output: &OutputFormat) {
             let dt = chrono::DateTime::from_timestamp(timestamp, 0);
             match dt {
                 Some(dt) => {
-                    println!("Server time: {} ({timestamp})", dt.format("%Y-%m-%d %H:%M:%S UTC"));
+                    println!(
+                        "Server time: {} ({timestamp})",
+                        dt.format("%Y-%m-%d %H:%M:%S UTC")
+                    );
                 }
                 None => println!("Server time: {timestamp}"),
             }
@@ -754,10 +751,7 @@ pub fn print_order_detail(result: &OpenOrderResponse, output: &OutputFormat) {
                 ["Order Type".into(), result.order_type.to_string()],
                 ["Created".into(), result.created_at.to_rfc3339()],
                 ["Expiration".into(), result.expiration.to_rfc3339()],
-                [
-                    "Trades".into(),
-                    result.associate_trades.join(", "),
-                ],
+                ["Trades".into(), result.associate_trades.join(", ")],
             ];
             super::print_detail_table(rows);
         }
@@ -790,7 +784,7 @@ fn post_order_to_json(r: &PostOrderResponse) -> serde_json::Value {
     let tx_hashes: Vec<_> = r
         .transaction_hashes
         .iter()
-        .map(|h| h.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
     json!({
         "order_id": r.order_id,
@@ -949,7 +943,11 @@ pub fn print_trades(result: &Page<TradeResponse>, output: &OutputFormat) {
 /// USDC uses 6 decimal places on-chain.
 const USDC_DECIMALS: u32 = 6;
 
-pub fn print_balance(result: &BalanceAllowanceResponse, is_collateral: bool, output: &OutputFormat) {
+pub fn print_balance(
+    result: &BalanceAllowanceResponse,
+    is_collateral: bool,
+    output: &OutputFormat,
+) {
     let divisor = Decimal::from(10u64.pow(USDC_DECIMALS));
     let human_balance = result.balance / divisor;
     match output {
@@ -957,7 +955,7 @@ pub fn print_balance(result: &BalanceAllowanceResponse, is_collateral: bool, out
             if is_collateral {
                 println!("Balance: {}", format_decimal(human_balance));
             } else {
-                println!("Balance: {} shares", human_balance);
+                println!("Balance: {human_balance} shares");
             }
             if !result.allowances.is_empty() {
                 println!("Allowances:");
@@ -1135,10 +1133,7 @@ pub fn print_earnings(result: &[TotalUserEarningResponse], output: &OutputFormat
 
 // --- User Earnings with Markets ---
 
-pub fn print_user_earnings_markets(
-    result: &[UserRewardsEarningResponse],
-    output: &OutputFormat,
-) {
+pub fn print_user_earnings_markets(result: &[UserRewardsEarningResponse], output: &OutputFormat) {
     match output {
         OutputFormat::Table => {
             if result.is_empty() {

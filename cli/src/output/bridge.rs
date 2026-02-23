@@ -5,7 +5,7 @@ use serde_json::json;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{format_decimal, print_detail_table, detail_field, OutputFormat};
+use super::{OutputFormat, detail_field, format_decimal, print_detail_table};
 
 // --- Deposit ---
 

@@ -1,13 +1,12 @@
+use super::parse_address;
+use crate::output::OutputFormat;
+use crate::output::bridge::{print_deposit, print_status, print_supported_assets};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::bridge::{
     self,
     types::{DepositRequest, StatusRequest},
 };
-use polymarket_client_sdk::types::Address;
-
-use crate::output::OutputFormat;
-use crate::output::bridge::{print_deposit, print_status, print_supported_assets};
 
 #[derive(Args)]
 pub struct BridgeArgs {
@@ -33,11 +32,6 @@ pub enum BridgeCommand {
     },
 }
 
-fn parse_address(s: &str) -> Result<Address> {
-    s.parse()
-        .map_err(|_| anyhow::anyhow!("Invalid address: must be a 0x-prefixed hex address"))
-}
-
 pub async fn execute(
     client: &bridge::Client,
     args: BridgeArgs,
@@ -59,9 +53,7 @@ pub async fn execute(
         }
 
         BridgeCommand::Status { address } => {
-            let request = StatusRequest::builder()
-                .address(&address)
-                .build();
+            let request = StatusRequest::builder().address(&address).build();
 
             let response = client.status(&request).await?;
             print_status(&response, &output);

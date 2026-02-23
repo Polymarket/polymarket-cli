@@ -32,8 +32,12 @@ fn comment_to_row(c: &Comment) -> CommentRow {
         id: truncate(&c.id, 12),
         author: comment_author(c),
         body: truncate(c.body.as_deref().unwrap_or("—"), 60),
-        reactions: c.reaction_count.map_or_else(|| "—".into(), |n| n.to_string()),
-        created: c.created_at.map_or_else(|| "—".into(), |d| d.format("%Y-%m-%d %H:%M").to_string()),
+        reactions: c
+            .reaction_count
+            .map_or_else(|| "—".into(), |n| n.to_string()),
+        created: c
+            .created_at
+            .map_or_else(|| "—".into(), |d| d.format("%Y-%m-%d %H:%M").to_string()),
     }
 }
 
@@ -52,10 +56,28 @@ pub fn print_comment_detail(c: &Comment) {
 
     detail_field!(rows, "ID", c.id.clone());
     detail_field!(rows, "Body", c.body.clone().unwrap_or_default());
-    detail_field!(rows, "Entity Type", c.parent_entity_type.clone().unwrap_or_default());
-    detail_field!(rows, "Entity ID", c.parent_entity_id.map(|id| id.to_string()).unwrap_or_default());
-    detail_field!(rows, "Parent Comment", c.parent_comment_id.clone().unwrap_or_default());
-    detail_field!(rows, "User Address", c.user_address.map(|a| format!("{a}")).unwrap_or_default());
+    detail_field!(
+        rows,
+        "Entity Type",
+        c.parent_entity_type.clone().unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Entity ID",
+        c.parent_entity_id
+            .map(|id| id.to_string())
+            .unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Parent Comment",
+        c.parent_comment_id.clone().unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "User Address",
+        c.user_address.map(|a| format!("{a}")).unwrap_or_default()
+    );
     detail_field!(
         rows,
         "Author",
@@ -65,10 +87,27 @@ pub fn print_comment_detail(c: &Comment) {
             .unwrap_or_default()
             .into()
     );
-    detail_field!(rows, "Reactions", c.reaction_count.map_or_else(|| "—".into(), |n| n.to_string()));
-    detail_field!(rows, "Reports", c.report_count.map(|n| n.to_string()).unwrap_or_default());
-    detail_field!(rows, "Created At", c.created_at.map(|d| d.to_string()).unwrap_or_default());
-    detail_field!(rows, "Updated At", c.updated_at.map(|d| d.to_string()).unwrap_or_default());
+    detail_field!(
+        rows,
+        "Reactions",
+        c.reaction_count
+            .map_or_else(|| "—".into(), |n| n.to_string())
+    );
+    detail_field!(
+        rows,
+        "Reports",
+        c.report_count.map(|n| n.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Created At",
+        c.created_at.map(|d| d.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Updated At",
+        c.updated_at.map(|d| d.to_string()).unwrap_or_default()
+    );
 
     print_detail_table(rows);
 }

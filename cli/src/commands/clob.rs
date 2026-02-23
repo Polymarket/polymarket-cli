@@ -9,26 +9,24 @@ use polymarket_client_sdk::clob::types::{
     request::{
         BalanceAllowanceRequest, CancelMarketOrderRequest, DeleteNotificationsRequest,
         LastTradePriceRequest, MidpointRequest, OrderBookSummaryRequest, OrdersRequest,
-        PriceHistoryRequest, PriceRequest, SpreadRequest, TradesRequest,
-        UserRewardsEarningRequest,
+        PriceHistoryRequest, PriceRequest, SpreadRequest, TradesRequest, UserRewardsEarningRequest,
     },
 };
-use polymarket_client_sdk::types::{B256, Decimal, U256};
+use polymarket_client_sdk::types::{Decimal, U256};
 
+use super::parse_condition_id;
 use crate::auth;
 use crate::output::OutputFormat;
 use crate::output::clob::{
     print_account_status, print_api_keys, print_balance, print_batch_prices, print_cancel_result,
     print_clob_market, print_clob_markets, print_create_api_key, print_current_rewards,
-    print_delete_api_key, print_earnings, print_fee_rate, print_geoblock,
-    print_last_trade, print_last_trades_prices, print_market_reward,
-    print_midpoint, print_midpoints, print_neg_risk, print_notifications, print_ok,
-    print_order_book, print_order_books, print_order_detail, print_order_scoring,
-    print_orders, print_orders_scoring, print_post_order_result, print_post_orders_result,
-    print_price,
-    print_price_history, print_reward_percentages, print_rewards, print_server_time,
-    print_simplified_markets, print_spread, print_spreads, print_tick_size, print_trades,
-    print_user_earnings_markets,
+    print_delete_api_key, print_earnings, print_fee_rate, print_geoblock, print_last_trade,
+    print_last_trades_prices, print_market_reward, print_midpoint, print_midpoints, print_neg_risk,
+    print_notifications, print_ok, print_order_book, print_order_books, print_order_detail,
+    print_order_scoring, print_orders, print_orders_scoring, print_post_order_result,
+    print_post_orders_result, print_price, print_price_history, print_reward_percentages,
+    print_rewards, print_server_time, print_simplified_markets, print_spread, print_spreads,
+    print_tick_size, print_trades, print_user_earnings_markets,
 };
 
 #[derive(Args)]
@@ -483,14 +481,7 @@ fn parse_token_id(s: &str) -> Result<U256> {
 }
 
 fn parse_token_ids(s: &str) -> Result<Vec<U256>> {
-    s.split(',')
-        .map(|t| parse_token_id(t.trim()))
-        .collect()
-}
-
-fn parse_condition_id(s: &str) -> Result<B256> {
-    s.parse()
-        .map_err(|_| anyhow::anyhow!("Invalid condition ID: must be a 0x-prefixed 32-byte hex"))
+    s.split(',').map(|t| parse_token_id(t.trim())).collect()
 }
 
 fn parse_date(s: &str) -> Result<NaiveDate> {
@@ -727,7 +718,7 @@ pub async fn execute(
             let size_dec =
                 Decimal::from_str(&size).map_err(|_| anyhow::anyhow!("Invalid size: {size}"))?;
 
-            let signable = client
+            let order = client
                 .limit_order()
                 .token_id(parse_token_id(&token)?)
                 .side(Side::from(side))
@@ -737,8 +728,8 @@ pub async fn execute(
                 .post_only(post_only)
                 .build()
                 .await?;
-            let signed = client.sign(&signer, signable).await?;
-            let result = client.post_order(signed).await?;
+            let order = client.sign(&signer, order).await?;
+            let result = client.post_order(order).await?;
             print_post_order_result(&result, &output);
         }
 
@@ -762,23 +753,28 @@ pub async fn execute(
                 );
             }
 
-            let mut signed_orders = Vec::with_capacity(token_ids.len());
-            for (i, token_id) in token_ids.into_iter().enumerate() {
-                let price_dec = Decimal::from_str(price_strs[i])
-                    .map_err(|_| anyhow::anyhow!("Invalid price: {}", price_strs[i]))?;
-                let size_dec = Decimal::from_str(size_strs[i])
-                    .map_err(|_| anyhow::anyhow!("Invalid size: {}", size_strs[i]))?;
+            let sdk_side = Side::from(side);
+            let sdk_order_type = OrderType::from(order_type);
 
-                let signable = client
+            let mut signed_orders = Vec::with_capacity(token_ids.len());
+            for ((token_id, price_str), size_str) in
+                token_ids.into_iter().zip(price_strs).zip(size_strs)
+            {
+                let price_dec = Decimal::from_str(price_str)
+                    .map_err(|_| anyhow::anyhow!("Invalid price: {price_str}"))?;
+                let size_dec = Decimal::from_str(size_str)
+                    .map_err(|_| anyhow::anyhow!("Invalid size: {size_str}"))?;
+
+                let order = client
                     .limit_order()
                     .token_id(token_id)
-                    .side(Side::from(side.clone()))
+                    .side(sdk_side)
                     .price(price_dec)
                     .size(size_dec)
-                    .order_type(OrderType::from(order_type.clone()))
+                    .order_type(sdk_order_type.clone())
                     .build()
                     .await?;
-                signed_orders.push(client.sign(&signer, signable).await?);
+                signed_orders.push(client.sign(&signer, order).await?);
             }
 
             let results = client.post_orders(signed_orders).await?;
@@ -797,13 +793,13 @@ pub async fn execute(
             let amount_dec = Decimal::from_str(&amount)
                 .map_err(|_| anyhow::anyhow!("Invalid amount: {amount}"))?;
             let sdk_side = Side::from(side);
-            let parsed_amount = match sdk_side {
-                Side::Buy => Amount::usdc(amount_dec)?,
-                Side::Sell => Amount::shares(amount_dec)?,
-                _ => Amount::usdc(amount_dec)?,
+            let parsed_amount = if matches!(sdk_side, Side::Sell) {
+                Amount::shares(amount_dec)?
+            } else {
+                Amount::usdc(amount_dec)?
             };
 
-            let signable = client
+            let order = client
                 .market_order()
                 .token_id(parse_token_id(&token)?)
                 .side(sdk_side)
@@ -811,8 +807,8 @@ pub async fn execute(
                 .order_type(OrderType::from(order_type))
                 .build()
                 .await?;
-            let signed = client.sign(&signer, signable).await?;
-            let result = client.post_order(signed).await?;
+            let order = client.sign(&signer, order).await?;
+            let result = client.post_order(order).await?;
             print_post_order_result(&result, &output);
         }
 
@@ -951,9 +947,7 @@ pub async fn execute(
             cursor,
         } => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
-            let result = client
-                .raw_rewards_for_market(&condition_id, cursor)
-                .await?;
+            let result = client.raw_rewards_for_market(&condition_id, cursor).await?;
             print_market_reward(&result, &output);
         }
 

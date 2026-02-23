@@ -11,9 +11,9 @@ pub mod tags;
 
 use polymarket_client_sdk::types::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use tabled::Table;
 use tabled::settings::object::Columns;
 use tabled::settings::{Modify, Style, Width};
-use tabled::Table;
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum OutputFormat {
@@ -22,13 +22,12 @@ pub enum OutputFormat {
 }
 
 pub fn truncate(s: &str, max: usize) -> String {
-    let mut chars = s.chars();
-    let truncated: String = chars.by_ref().take(max.saturating_sub(1)).collect();
-    if chars.next().is_some() {
-        format!("{truncated}…")
-    } else {
-        truncated
+    if s.chars().count() <= max {
+        return s.to_string();
     }
+    let mut truncated: String = s.chars().take(max.saturating_sub(1)).collect();
+    truncated.push('\u{2026}');
+    truncated
 }
 
 pub fn format_decimal(n: Decimal) -> String {

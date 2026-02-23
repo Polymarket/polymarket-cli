@@ -5,8 +5,8 @@ use polymarket_client_sdk::gamma::{
     types::request::{SeriesByIdRequest, SeriesListRequest},
 };
 
-use crate::output::{OutputFormat, print_json};
 use crate::output::series::{print_series_detail, print_series_table};
+use crate::output::{OutputFormat, print_json};
 
 #[derive(Args)]
 pub struct SeriesArgs {
@@ -46,11 +46,7 @@ pub enum SeriesCommand {
     },
 }
 
-pub async fn execute(
-    client: &gamma::Client,
-    args: SeriesArgs,
-    output: OutputFormat,
-) -> Result<()> {
+pub async fn execute(client: &gamma::Client, args: SeriesArgs, output: OutputFormat) -> Result<()> {
     match args.command {
         SeriesCommand::List {
             limit,

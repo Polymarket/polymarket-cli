@@ -11,9 +11,10 @@ use polymarket_client_sdk::gamma::{
     },
 };
 
-use crate::output::{OutputFormat, print_json};
+use super::is_numeric_id;
 use crate::output::markets::{print_market_detail, print_markets_table};
 use crate::output::tags::print_tags_table;
+use crate::output::{OutputFormat, print_json};
 
 #[derive(Args)]
 pub struct MarketsArgs {
@@ -73,14 +74,6 @@ pub enum MarketsCommand {
     },
 }
 
-fn render_markets(markets: &[Market], output: &OutputFormat) -> Result<()> {
-    match output {
-        OutputFormat::Table => print_markets_table(markets),
-        OutputFormat::Json => print_json(&markets)?,
-    }
-    Ok(())
-}
-
 pub async fn execute(
     client: &gamma::Client,
     args: MarketsArgs,
@@ -106,11 +99,15 @@ pub async fn execute(
                 .build();
 
             let markets = client.markets(&request).await?;
-            render_markets(&markets, &output)?;
+
+            match output {
+                OutputFormat::Table => print_markets_table(&markets),
+                OutputFormat::Json => print_json(&markets)?,
+            }
         }
 
         MarketsCommand::Get { id } => {
-            let is_numeric = !id.is_empty() && id.chars().all(|c| c.is_ascii_digit());
+            let is_numeric = is_numeric_id(&id);
             let market = if is_numeric {
                 let req = MarketByIdRequest::builder().id(id).build();
                 client.market_by_id(&req).await?
@@ -140,7 +137,10 @@ pub async fn execute(
                 .flat_map(|e| e.markets.unwrap_or_default())
                 .collect();
 
-            render_markets(&markets, &output)?;
+            match output {
+                OutputFormat::Table => print_markets_table(&markets),
+                OutputFormat::Json => print_json(&markets)?,
+            }
         }
 
         MarketsCommand::Tags { id } => {

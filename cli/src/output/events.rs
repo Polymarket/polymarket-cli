@@ -54,13 +54,18 @@ pub fn print_events_table(events: &[Event]) {
     println!("{table}");
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn print_event_detail(e: &Event) {
     let mut rows: Vec<[String; 2]> = Vec::new();
 
     detail_field!(rows, "ID", e.id.clone());
     detail_field!(rows, "Title", e.title.clone().unwrap_or_default());
     detail_field!(rows, "Slug", e.slug.clone().unwrap_or_default());
-    detail_field!(rows, "Description", e.description.clone().unwrap_or_default());
+    detail_field!(
+        rows,
+        "Description",
+        e.description.clone().unwrap_or_default()
+    );
     detail_field!(rows, "Category", e.category.clone().unwrap_or_default());
     detail_field!(
         rows,
@@ -79,24 +84,74 @@ pub fn print_event_detail(e: &Event) {
             })
             .unwrap_or_default()
     );
-    detail_field!(rows, "Volume", e.volume.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Liquidity", e.liquidity.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Open Interest", e.open_interest.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Volume (24hr)", e.volume_24hr.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Volume (1wk)", e.volume_1wk.map(format_decimal).unwrap_or_default());
-    detail_field!(rows, "Volume (1mo)", e.volume_1mo.map(format_decimal).unwrap_or_default());
+    detail_field!(
+        rows,
+        "Volume",
+        e.volume.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Liquidity",
+        e.liquidity.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Open Interest",
+        e.open_interest.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Volume (24hr)",
+        e.volume_24hr.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Volume (1wk)",
+        e.volume_1wk.map(format_decimal).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Volume (1mo)",
+        e.volume_1mo.map(format_decimal).unwrap_or_default()
+    );
     detail_field!(rows, "Status", event_status(e).into());
-    detail_field!(rows, "Neg Risk", e.neg_risk.map(|v| v.to_string()).unwrap_or_default());
+    detail_field!(
+        rows,
+        "Neg Risk",
+        e.neg_risk.map(|v| v.to_string()).unwrap_or_default()
+    );
     detail_field!(
         rows,
         "Neg Risk Market ID",
-        e.neg_risk_market_id.map(|id| format!("{id}")).unwrap_or_default()
+        e.neg_risk_market_id
+            .map(|id| format!("{id}"))
+            .unwrap_or_default()
     );
-    detail_field!(rows, "Comment Count", e.comment_count.map(|c| c.to_string()).unwrap_or_default());
-    detail_field!(rows, "Start Date", e.start_date.map(|d| d.to_string()).unwrap_or_default());
-    detail_field!(rows, "End Date", e.end_date.map(|d| d.to_string()).unwrap_or_default());
-    detail_field!(rows, "Created At", e.created_at.map(|d| d.to_string()).unwrap_or_default());
-    detail_field!(rows, "Resolution Source", e.resolution_source.clone().unwrap_or_default());
+    detail_field!(
+        rows,
+        "Comment Count",
+        e.comment_count.map(|c| c.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Start Date",
+        e.start_date.map(|d| d.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "End Date",
+        e.end_date.map(|d| d.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Created At",
+        e.created_at.map(|d| d.to_string()).unwrap_or_default()
+    );
+    detail_field!(
+        rows,
+        "Resolution Source",
+        e.resolution_source.clone().unwrap_or_default()
+    );
     detail_field!(
         rows,
         "Tags",

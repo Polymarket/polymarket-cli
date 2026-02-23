@@ -1,16 +1,15 @@
+use super::parse_address;
+use crate::output::comments::{print_comment_detail, print_comments_table};
+use crate::output::{OutputFormat, print_json};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::gamma::{
     self,
     types::{
-        request::{CommentsByIdRequest, CommentsByUserAddressRequest, CommentsRequest},
         ParentEntityType,
+        request::{CommentsByIdRequest, CommentsByUserAddressRequest, CommentsRequest},
     },
 };
-use polymarket_client_sdk::types::Address;
-
-use crate::output::{OutputFormat, print_json};
-use crate::output::comments::{print_comment_detail, print_comments_table};
 
 #[derive(Args)]
 pub struct CommentsArgs {
@@ -128,15 +127,13 @@ pub async fn execute(
             let req = CommentsByIdRequest::builder().id(id).build();
             let comments = client.comments_by_id(&req).await?;
 
+            let Some(comment) = comments.first() else {
+                anyhow::bail!("Comment not found");
+            };
+
             match output {
-                OutputFormat::Table => {
-                    if let Some(comment) = comments.first() {
-                        print_comment_detail(comment);
-                    } else {
-                        println!("Comment not found.");
-                    }
-                }
-                OutputFormat::Json => print_json(&comments)?,
+                OutputFormat::Table => print_comment_detail(comment),
+                OutputFormat::Json => print_json(&comment)?,
             }
         }
 
@@ -147,7 +144,7 @@ pub async fn execute(
             order,
             ascending,
         } => {
-            let addr: Address = address.parse().map_err(|_| anyhow::anyhow!("Invalid address: must be a 0x-prefixed hex address"))?;
+            let addr = parse_address(&address)?;
             let request = CommentsByUserAddressRequest::builder()
                 .user_address(addr)
                 .limit(limit)

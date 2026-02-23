@@ -1,13 +1,9 @@
+use super::parse_address;
+use crate::output::profiles::print_profile_detail;
+use crate::output::{OutputFormat, print_json};
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::gamma::{
-    self,
-    types::request::PublicProfileRequest,
-};
-use polymarket_client_sdk::types::Address;
-
-use crate::output::{OutputFormat, print_json};
-use crate::output::profiles::print_profile_detail;
+use polymarket_client_sdk::gamma::{self, types::request::PublicProfileRequest};
 
 #[derive(Args)]
 pub struct ProfilesArgs {
@@ -31,7 +27,7 @@ pub async fn execute(
 ) -> Result<()> {
     match args.command {
         ProfilesCommand::Get { address } => {
-            let addr: Address = address.parse().map_err(|_| anyhow::anyhow!("Invalid address: must be a 0x-prefixed hex address"))?;
+            let addr = parse_address(&address)?;
             let req = PublicProfileRequest::builder().address(addr).build();
             let profile = client.public_profile(&req).await?;
 

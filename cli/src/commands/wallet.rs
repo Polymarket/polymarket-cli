@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
@@ -19,6 +20,7 @@ pub struct WalletArgs {
 pub enum WalletCommand {
     /// Generate a new random wallet and save to config
     Create {
+        /// Overwrite existing wallet
         #[arg(long)]
         force: bool,
         /// Signature type: eoa, proxy (default), or gnosis-safe
@@ -27,7 +29,9 @@ pub enum WalletCommand {
     },
     /// Import an existing private key
     Import {
+        /// Private key (hex, with or without 0x prefix)
         key: String,
+        /// Overwrite existing wallet
         #[arg(long)]
         force: bool,
         /// Signature type: eoa, proxy (default), or gnosis-safe
@@ -40,7 +44,11 @@ pub enum WalletCommand {
     Show,
 }
 
-pub fn execute(args: WalletArgs, output: OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
+pub fn execute(
+    args: WalletArgs,
+    output: &OutputFormat,
+    private_key_flag: Option<&str>,
+) -> Result<()> {
     match args.command {
         WalletCommand::Create {
             force,
@@ -74,13 +82,17 @@ fn normalize_key(key: &str) -> String {
     }
 }
 
-fn cmd_create(output: OutputFormat, force: bool, signature_type: &str) -> Result<()> {
+fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Result<()> {
     guard_overwrite(force)?;
 
     let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
     let address = signer.address();
     let bytes = signer.credential().to_bytes();
-    let key_hex = format!("0x{}", bytes.iter().map(|b| format!("{b:02x}")).collect::<String>());
+    let mut key_hex = String::with_capacity(2 + bytes.len() * 2);
+    key_hex.push_str("0x");
+    for b in &bytes {
+        write!(key_hex, "{b:02x}").unwrap();
+    }
 
     config::save_wallet(&key_hex, POLYGON, signature_type)?;
     let config_path = config::config_path()?;
@@ -114,7 +126,7 @@ fn cmd_create(output: OutputFormat, force: bool, signature_type: &str) -> Result
     Ok(())
 }
 
-fn cmd_import(key: &str, output: OutputFormat, force: bool, signature_type: &str) -> Result<()> {
+fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &str) -> Result<()> {
     guard_overwrite(force)?;
 
     let normalized = normalize_key(key);
@@ -152,7 +164,7 @@ fn cmd_import(key: &str, output: OutputFormat, force: bool, signature_type: &str
     Ok(())
 }
 
-fn cmd_address(output: OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
+fn cmd_address(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
     let (key, _) = config::resolve_key(private_key_flag);
     let key = key.ok_or_else(|| anyhow::anyhow!("{}", config::NO_WALLET_MSG))?;
 
@@ -170,11 +182,9 @@ fn cmd_address(output: OutputFormat, private_key_flag: Option<&str>) -> Result<(
     Ok(())
 }
 
-fn cmd_show(output: OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
+fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
     let (key, source) = config::resolve_key(private_key_flag);
-    let signer = key
-        .as_deref()
-        .and_then(|k| LocalSigner::from_str(k).ok());
+    let signer = key.as_deref().and_then(|k| LocalSigner::from_str(k).ok());
     let address = signer.as_ref().map(|s| s.address().to_string());
     let proxy_addr = signer
         .as_ref()

@@ -8,8 +8,9 @@ use polymarket_client_sdk::gamma::{
     },
 };
 
-use crate::output::{OutputFormat, print_json};
+use super::is_numeric_id;
 use crate::output::tags::{print_related_tags_table, print_tag_detail, print_tags_table};
+use crate::output::{OutputFormat, print_json};
 
 #[derive(Args)]
 pub struct TagsArgs {
@@ -61,11 +62,7 @@ pub enum TagsCommand {
     },
 }
 
-pub async fn execute(
-    client: &gamma::Client,
-    args: TagsArgs,
-    output: OutputFormat,
-) -> Result<()> {
+pub async fn execute(client: &gamma::Client, args: TagsArgs, output: OutputFormat) -> Result<()> {
     match args.command {
         TagsCommand::List {
             limit,
@@ -87,7 +84,7 @@ pub async fn execute(
         }
 
         TagsCommand::Get { id } => {
-            let is_numeric = !id.is_empty() && id.chars().all(|c| c.is_ascii_digit());
+            let is_numeric = is_numeric_id(&id);
             let tag = if is_numeric {
                 let req = TagByIdRequest::builder().id(id).build();
                 client.tag_by_id(&req).await?
@@ -103,7 +100,7 @@ pub async fn execute(
         }
 
         TagsCommand::Related { id, omit_empty } => {
-            let is_numeric = !id.is_empty() && id.chars().all(|c| c.is_ascii_digit());
+            let is_numeric = is_numeric_id(&id);
             let related = if is_numeric {
                 let req = RelatedTagsByIdRequest::builder()
                     .id(id)
@@ -125,7 +122,7 @@ pub async fn execute(
         }
 
         TagsCommand::RelatedTags { id, omit_empty } => {
-            let is_numeric = !id.is_empty() && id.chars().all(|c| c.is_ascii_digit());
+            let is_numeric = is_numeric_id(&id);
             let tags = if is_numeric {
                 let req = RelatedTagsByIdRequest::builder()
                     .id(id)

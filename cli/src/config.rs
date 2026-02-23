@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
 const SIG_TYPE_ENV_VAR: &str = "POLYMARKET_SIGNATURE_TYPE";
+pub const DEFAULT_SIGNATURE_TYPE: &str = "proxy";
 
 pub const NO_WALLET_MSG: &str =
     "No wallet configured. Run `polymarket wallet create` or `polymarket wallet import <key>`";
@@ -19,7 +20,7 @@ pub struct Config {
 }
 
 fn default_signature_type() -> String {
-    "proxy".to_string()
+    DEFAULT_SIGNATURE_TYPE.to_string()
 }
 
 pub enum KeySource {
@@ -50,21 +51,13 @@ pub fn config_path() -> Result<PathBuf> {
 }
 
 pub fn config_exists() -> bool {
-    config_path().map(|p| p.exists()).unwrap_or(false)
+    config_path().is_ok_and(|p| p.exists())
 }
 
 pub fn load_config() -> Option<Config> {
     let path = config_path().ok()?;
     let data = fs::read_to_string(path).ok()?;
     serde_json::from_str(&data).ok()
-}
-
-pub fn load_private_key() -> Option<String> {
-    load_config().map(|c| c.private_key)
-}
-
-pub fn load_signature_type() -> Option<String> {
-    load_config().map(|c| c.signature_type)
 }
 
 /// Priority: CLI flag > env var > config file > default ("proxy").
@@ -77,17 +70,13 @@ pub fn resolve_signature_type(cli_flag: Option<&str>) -> String {
     {
         return st;
     }
-    if let Some(st) = load_signature_type() {
-        return st;
+    if let Some(config) = load_config() {
+        return config.signature_type;
     }
-    "proxy".to_string()
+    DEFAULT_SIGNATURE_TYPE.to_string()
 }
 
 pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()> {
-    save_config(key, chain_id, signature_type)
-}
-
-fn save_config(key: &str, chain_id: u64, signature_type: &str) -> Result<()> {
     let dir = config_dir()?;
     fs::create_dir_all(&dir).context("Failed to create config directory")?;
 
@@ -138,8 +127,8 @@ pub fn resolve_key(cli_flag: Option<&str>) -> (Option<String>, KeySource) {
     {
         return (Some(key), KeySource::EnvVar);
     }
-    if let Some(key) = load_private_key() {
-        return (Some(key), KeySource::ConfigFile);
+    if let Some(config) = load_config() {
+        return (Some(config.private_key), KeySource::ConfigFile);
     }
     (None, KeySource::None)
 }

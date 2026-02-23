@@ -5,9 +5,10 @@ use polymarket_client_sdk::gamma::{
     types::request::{EventByIdRequest, EventBySlugRequest, EventTagsRequest, EventsRequest},
 };
 
-use crate::output::{OutputFormat, print_json};
+use super::is_numeric_id;
 use crate::output::events::{print_event_detail, print_events_table};
 use crate::output::tags::print_tags_table;
+use crate::output::{OutputFormat, print_json};
 
 #[derive(Args)]
 pub struct EventsArgs {
@@ -61,11 +62,7 @@ pub enum EventsCommand {
     },
 }
 
-pub async fn execute(
-    client: &gamma::Client,
-    args: EventsArgs,
-    output: OutputFormat,
-) -> Result<()> {
+pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFormat) -> Result<()> {
     match args.command {
         EventsCommand::List {
             active,
@@ -96,7 +93,7 @@ pub async fn execute(
         }
 
         EventsCommand::Get { id } => {
-            let is_numeric = !id.is_empty() && id.chars().all(|c| c.is_ascii_digit());
+            let is_numeric = is_numeric_id(&id);
             let event = if is_numeric {
                 let req = EventByIdRequest::builder().id(id).build();
                 client.event_by_id(&req).await?
