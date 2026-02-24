@@ -30,6 +30,10 @@ pub fn parse_condition_id(s: &str) -> anyhow::Result<B256> {
         .map_err(|_| anyhow::anyhow!("Invalid condition ID: must be a 0x-prefixed 32-byte hex"))
 }
 
+pub fn flag_matches(value: Option<bool>, filter: Option<bool>) -> bool {
+    filter.is_none_or(|expected| value == Some(expected))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,5 +90,18 @@ mod tests {
     fn parse_condition_id_rejects_garbage() {
         let err = parse_condition_id("garbage").unwrap_err().to_string();
         assert!(err.contains("32-byte"), "got: {err}");
+    }
+
+    #[test]
+    fn flag_matches_true_cases() {
+        assert!(flag_matches(Some(true), Some(true)));
+        assert!(flag_matches(Some(false), Some(false)));
+        assert!(flag_matches(Some(true), None));
+    }
+
+    #[test]
+    fn flag_matches_false_cases() {
+        assert!(!flag_matches(Some(true), Some(false)));
+        assert!(!flag_matches(None, Some(true)));
     }
 }

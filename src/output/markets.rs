@@ -9,7 +9,7 @@ use super::{detail_field, format_decimal, print_detail_table, truncate};
 struct MarketRow {
     #[tabled(rename = "Question")]
     question: String,
-    #[tabled(rename = "Price (Yes)")]
+    #[tabled(rename = "Price")]
     price_yes: String,
     #[tabled(rename = "Volume")]
     volume: String,
@@ -31,11 +31,14 @@ fn market_status(m: &Market) -> &'static str {
 
 fn market_to_row(m: &Market) -> MarketRow {
     let question = m.question.as_deref().unwrap_or("—");
-    let price_yes = m
-        .outcome_prices
-        .as_ref()
-        .and_then(|p| p.first())
-        .map_or_else(|| "—".into(), |p| format!("{:.2}¢", p * Decimal::from(100)));
+    let price_yes =
+        primary_outcome_price(m).map_or_else(
+            || "—".into(),
+            |(outcome, price)| match outcome {
+                Some(outcome) => format!("{outcome}: {:.2}¢", price * Decimal::from(100)),
+                None => format!("{:.2}¢", price * Decimal::from(100)),
+            },
+        );
 
     MarketRow {
         question: truncate(question, 60),
@@ -43,6 +46,21 @@ fn market_to_row(m: &Market) -> MarketRow {
         volume: m.volume_num.map_or_else(|| "—".into(), format_decimal),
         liquidity: m.liquidity_num.map_or_else(|| "—".into(), format_decimal),
         status: market_status(m).into(),
+    }
+}
+
+fn primary_outcome_price(m: &Market) -> Option<(Option<String>, Decimal)> {
+    let prices = m.outcome_prices.as_ref()?;
+
+    if let Some(outcomes) = m.outcomes.as_ref() {
+        outcomes
+            .iter()
+            .zip(prices.iter())
+            .find(|(outcome, _)| outcome.eq_ignore_ascii_case("yes"))
+            .or_else(|| outcomes.iter().zip(prices.iter()).next())
+            .map(|(outcome, price)| (Some(outcome.clone()), *price))
+    } else {
+        prices.first().map(|price| (None, *price))
     }
 }
 
@@ -206,6 +224,36 @@ mod tests {
 
     #[test]
     fn row_formats_price_as_cents() {
+        let m = make_market(json!({
+            "id": "1",
+            "outcomes": "[\"Yes\",\"No\"]",
+            "outcomePrices": "[\"0.65\",\"0.35\"]"
+        }));
+        assert_eq!(market_to_row(&m).price_yes, "Yes: 65.00¢");
+    }
+
+    #[test]
+    fn row_prefers_yes_outcome_when_not_first() {
+        let m = make_market(json!({
+            "id": "1",
+            "outcomes": "[\"No\",\"Yes\"]",
+            "outcomePrices": "[\"0.35\",\"0.65\"]"
+        }));
+        assert_eq!(market_to_row(&m).price_yes, "Yes: 65.00¢");
+    }
+
+    #[test]
+    fn row_uses_first_outcome_for_non_binary_market() {
+        let m = make_market(json!({
+            "id": "1",
+            "outcomes": "[\"Long\",\"Short\"]",
+            "outcomePrices": "[\"0.58\",\"0.42\"]"
+        }));
+        assert_eq!(market_to_row(&m).price_yes, "Long: 58.00¢");
+    }
+
+    #[test]
+    fn row_shows_unlabeled_price_when_outcomes_missing() {
         let m = make_market(json!({
             "id": "1",
             "outcomePrices": "[\"0.65\",\"0.35\"]"
