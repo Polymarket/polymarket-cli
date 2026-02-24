@@ -8,7 +8,7 @@ use polymarket_client_sdk::gamma::{
     },
 };
 
-use super::is_numeric_id;
+use super::{flag_matches, is_numeric_id};
 use crate::output::events::{print_event_detail, print_events_table};
 use crate::output::tags::print_tags_table;
 use crate::output::{OutputFormat, print_json};
@@ -76,10 +76,6 @@ fn apply_status_filters(
             flag_matches(event.active, active_filter) && flag_matches(event.closed, closed_filter)
         })
         .collect()
-}
-
-fn flag_matches(value: Option<bool>, filter: Option<bool>) -> bool {
-    filter.is_none_or(|expected| value == Some(expected))
 }
 
 pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFormat) -> Result<()> {

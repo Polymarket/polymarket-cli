@@ -11,7 +11,7 @@ use polymarket_client_sdk::gamma::{
     },
 };
 
-use super::is_numeric_id;
+use super::{flag_matches, is_numeric_id};
 use crate::output::markets::{print_market_detail, print_markets_table};
 use crate::output::tags::print_tags_table;
 use crate::output::{OutputFormat, print_json};
@@ -87,8 +87,55 @@ fn apply_status_filters(
         .collect()
 }
 
-fn flag_matches(value: Option<bool>, filter: Option<bool>) -> bool {
-    filter.is_none_or(|expected| value == Some(expected))
+async fn list_markets(
+    client: &gamma::Client,
+    limit: i32,
+    offset: Option<i32>,
+    order: Option<String>,
+    ascending: bool,
+    active: Option<bool>,
+    closed: Option<bool>,
+) -> Result<Vec<Market>> {
+    let page_size = limit.max(1);
+    let mut next_offset = offset.unwrap_or(0);
+    let mut collected: Vec<Market> = Vec::new();
+
+    loop {
+        let request = MarketsRequest::builder()
+            .limit(page_size)
+            .maybe_closed(closed)
+            .maybe_offset(Some(next_offset))
+            .maybe_order(order.clone())
+            .maybe_ascending(if ascending { Some(true) } else { None })
+            .build();
+
+        let page = client.markets(&request).await?;
+        if page.is_empty() {
+            break;
+        }
+
+        let raw_count = page.len();
+        collected.extend(apply_status_filters(page, active, closed));
+
+        if collected.len() >= page_size as usize {
+            collected.truncate(page_size as usize);
+            break;
+        }
+
+        // Without an active filter, the API-side limit should be authoritative.
+        if active.is_none() {
+            break;
+        }
+
+        // Reached end of available results from the backend.
+        if raw_count < page_size as usize {
+            break;
+        }
+
+        next_offset += raw_count as i32;
+    }
+
+    Ok(collected)
 }
 
 pub async fn execute(
@@ -105,15 +152,8 @@ pub async fn execute(
             order,
             ascending,
         } => {
-            let request = MarketsRequest::builder()
-                .limit(limit)
-                .maybe_closed(closed)
-                .maybe_offset(offset)
-                .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
-                .build();
-
-            let markets = apply_status_filters(client.markets(&request).await?, active, closed);
+            let markets =
+                list_markets(client, limit, offset, order, ascending, active, closed).await?;
 
             match output {
                 OutputFormat::Table => print_markets_table(&markets),
