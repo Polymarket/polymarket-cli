@@ -5,7 +5,7 @@ use polymarket_client_sdk::gamma::{
     types::request::{EventByIdRequest, EventBySlugRequest, EventTagsRequest, EventsRequest},
 };
 
-use super::is_numeric_id;
+use super::{ResolvedId, resolve_id};
 use crate::output::events::{print_event_detail, print_events_table};
 use crate::output::tags::print_tags_table;
 use crate::output::{OutputFormat, print_json};
@@ -51,7 +51,7 @@ pub enum EventsCommand {
 
     /// Get a single event by ID or slug
     Get {
-        /// Event ID (numeric) or slug
+        /// Event ID (numeric), slug, or Polymarket URL
         id: String,
     },
 
@@ -93,13 +93,15 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
         }
 
         EventsCommand::Get { id } => {
-            let is_numeric = is_numeric_id(&id);
-            let event = if is_numeric {
-                let req = EventByIdRequest::builder().id(id).build();
-                client.event_by_id(&req).await?
-            } else {
-                let req = EventBySlugRequest::builder().slug(id).build();
-                client.event_by_slug(&req).await?
+            let event = match resolve_id(&id, false) {
+                ResolvedId::Numeric(n) => {
+                    let req = EventByIdRequest::builder().id(n).build();
+                    client.event_by_id(&req).await?
+                }
+                ResolvedId::Slug(slug) => {
+                    let req = EventBySlugRequest::builder().slug(slug).build();
+                    client.event_by_slug(&req).await?
+                }
             };
 
             match output {
