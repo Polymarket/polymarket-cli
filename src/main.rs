@@ -151,7 +151,13 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
             .await
         }
         Commands::Approve(args) => {
-            commands::approve::execute(args, cli.output, cli.private_key.as_deref()).await
+            commands::approve::execute(
+                args,
+                cli.output,
+                cli.private_key.as_deref(),
+                cli.signature_type.as_deref(),
+            )
+            .await
         }
         Commands::Clob(args) => {
             commands::clob::execute(
@@ -163,7 +169,13 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
             .await
         }
         Commands::Ctf(args) => {
-            commands::ctf::execute(args, cli.output, cli.private_key.as_deref()).await
+            commands::ctf::execute(
+                args,
+                cli.output,
+                cli.private_key.as_deref(),
+                cli.signature_type.as_deref(),
+            )
+            .await
         }
         Commands::Data(args) => {
             commands::data::execute(
