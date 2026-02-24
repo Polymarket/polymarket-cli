@@ -12,9 +12,7 @@ use polymarket_client_sdk::clob::types::{
         PriceHistoryRequest, PriceRequest, SpreadRequest, TradesRequest, UserRewardsEarningRequest,
     },
 };
-use polymarket_client_sdk::types::{Decimal, U256};
-
-use super::parse_condition_id;
+use polymarket_client_sdk::types::{B256, Decimal, U256};
 use crate::auth;
 use crate::output::OutputFormat;
 use crate::output::clob::{
@@ -183,10 +181,10 @@ pub enum ClobCommand {
     Orders {
         /// Filter by market condition ID
         #[arg(long)]
-        market: Option<String>,
+        market: Option<B256>,
         /// Filter by asset/token ID
         #[arg(long)]
-        asset: Option<String>,
+        asset: Option<U256>,
         /// Pagination cursor
         #[arg(long)]
         cursor: Option<String>,
@@ -274,20 +272,20 @@ pub enum ClobCommand {
     CancelMarket {
         /// Market condition ID
         #[arg(long)]
-        market: Option<String>,
+        market: Option<B256>,
         /// Asset/token ID
         #[arg(long)]
-        asset: Option<String>,
+        asset: Option<U256>,
     },
 
     /// List trades (authenticated)
     Trades {
         /// Filter by market condition ID
         #[arg(long)]
-        market: Option<String>,
+        market: Option<B256>,
         /// Filter by asset/token ID
         #[arg(long)]
-        asset: Option<String>,
+        asset: Option<U256>,
         /// Pagination cursor
         #[arg(long)]
         cursor: Option<String>,
@@ -300,7 +298,7 @@ pub enum ClobCommand {
         asset_type: CliAssetType,
         /// Token ID (required for conditional)
         #[arg(long)]
-        token: Option<String>,
+        token: Option<U256>,
     },
 
     /// Refresh balance allowance on-chain (authenticated)
@@ -310,7 +308,7 @@ pub enum ClobCommand {
         asset_type: CliAssetType,
         /// Token ID (required for conditional)
         #[arg(long)]
-        token: Option<String>,
+        token: Option<U256>,
     },
 
     /// List notifications (authenticated)
@@ -393,7 +391,7 @@ pub enum ClobCommand {
     AccountStatus,
 }
 
-#[derive(Clone, Debug, clap::ValueEnum)]
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum CliSide {
     Buy,
     Sell,
@@ -583,7 +581,7 @@ async fn execute_read(command: ClobCommand, output: &OutputFormat) -> Result<()>
                 .map(|id| {
                     PriceRequest::builder()
                         .token_id(id)
-                        .side(Side::from(side.clone()))
+                        .side(Side::from(side))
                         .build()
                 })
                 .collect();
@@ -763,8 +761,8 @@ async fn execute_trade(
         } => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let request = OrdersRequest::builder()
-                .maybe_market(market.map(|m| parse_condition_id(&m)).transpose()?)
-                .maybe_asset_id(asset.map(|a| parse_token_id(&a)).transpose()?)
+                .maybe_market(market)
+                .maybe_asset_id(asset)
                 .build();
             let result = client.orders(&request, cursor).await?;
             print_orders(&result, output)?;
@@ -908,8 +906,8 @@ async fn execute_trade(
         ClobCommand::CancelMarket { market, asset } => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let request = CancelMarketOrderRequest::builder()
-                .maybe_market(market.map(|m| parse_condition_id(&m)).transpose()?)
-                .maybe_asset_id(asset.map(|a| parse_token_id(&a)).transpose()?)
+                .maybe_market(market)
+                .maybe_asset_id(asset)
                 .build();
             let result = client.cancel_market_orders(&request).await?;
             print_cancel_result(&result, output)?;
@@ -922,8 +920,8 @@ async fn execute_trade(
         } => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let request = TradesRequest::builder()
-                .maybe_market(market.map(|m| parse_condition_id(&m)).transpose()?)
-                .maybe_asset_id(asset.map(|a| parse_token_id(&a)).transpose()?)
+                .maybe_market(market)
+                .maybe_asset_id(asset)
                 .build();
             let result = client.trades(&request, cursor).await?;
             print_trades(&result, output)?;
@@ -934,7 +932,7 @@ async fn execute_trade(
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let request = BalanceAllowanceRequest::builder()
                 .asset_type(AssetType::from(asset_type))
-                .maybe_token_id(token.map(|t| parse_token_id(&t)).transpose()?)
+                .maybe_token_id(token)
                 .build();
             let result = client.balance_allowance(request).await?;
             print_balance(&result, is_collateral, output)?;
@@ -944,7 +942,7 @@ async fn execute_trade(
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let request = BalanceAllowanceRequest::builder()
                 .asset_type(AssetType::from(asset_type))
-                .maybe_token_id(token.map(|t| parse_token_id(&t)).transpose()?)
+                .maybe_token_id(token)
                 .build();
             client.update_balance_allowance(request).await?;
             match output {

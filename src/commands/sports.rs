@@ -75,7 +75,7 @@ pub async fn execute(client: &gamma::Client, args: SportsArgs, output: OutputFor
                 .maybe_offset(offset)
                 .maybe_order(order)
                 .maybe_ascending(if ascending { Some(true) } else { None })
-                .league(league.into_iter().collect::<Vec<_>>())
+                .league(league.into_iter().collect())
                 .build();
 
             let teams = client.teams(&request).await?;

@@ -3,7 +3,7 @@ use polymarket_client_sdk::types::Decimal;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{detail_field, format_decimal, print_detail_table, truncate};
+use super::{active_status, detail_field, format_decimal, print_detail_table, truncate};
 
 #[derive(Tabled)]
 struct MarketRow {
@@ -19,16 +19,6 @@ struct MarketRow {
     status: String,
 }
 
-fn market_status(m: &Market) -> &'static str {
-    if m.closed == Some(true) {
-        "Closed"
-    } else if m.active == Some(true) {
-        "Active"
-    } else {
-        "Inactive"
-    }
-}
-
 fn market_to_row(m: &Market) -> MarketRow {
     let question = m.question.as_deref().unwrap_or("—");
     let price_yes = m
@@ -42,7 +32,7 @@ fn market_to_row(m: &Market) -> MarketRow {
         price_yes,
         volume: m.volume_num.map_or_else(|| "—".into(), format_decimal),
         liquidity: m.liquidity_num.map_or_else(|| "—".into(), format_decimal),
-        status: market_status(m).into(),
+        status: active_status(m.closed, m.active).into(),
     }
 }
 
@@ -119,7 +109,7 @@ pub fn print_market_detail(m: &Market) {
             .map(|v| format!("{v:.4}"))
             .unwrap_or_default()
     );
-    detail_field!(rows, "Status", market_status(m).into());
+    detail_field!(rows, "Status", active_status(m.closed, m.active).into());
     detail_field!(
         rows,
         "Condition ID",
@@ -173,25 +163,25 @@ mod tests {
     #[test]
     fn status_closed_overrides_active() {
         let m = make_market(json!({"id": "1", "closed": true, "active": true}));
-        assert_eq!(market_status(&m), "Closed");
+        assert_eq!(active_status(m.closed, m.active), "Closed");
     }
 
     #[test]
     fn status_active_when_not_closed() {
         let m = make_market(json!({"id": "1", "closed": false, "active": true}));
-        assert_eq!(market_status(&m), "Active");
+        assert_eq!(active_status(m.closed, m.active), "Active");
     }
 
     #[test]
     fn status_inactive_when_fields_missing() {
         let m = make_market(json!({"id": "1"}));
-        assert_eq!(market_status(&m), "Inactive");
+        assert_eq!(active_status(m.closed, m.active), "Inactive");
     }
 
     #[test]
     fn status_inactive_when_both_false() {
         let m = make_market(json!({"id": "1", "closed": false, "active": false}));
-        assert_eq!(market_status(&m), "Inactive");
+        assert_eq!(active_status(m.closed, m.active), "Inactive");
     }
 
     #[test]

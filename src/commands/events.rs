@@ -81,7 +81,7 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
                 .maybe_offset(offset)
                 .maybe_ascending(if ascending { Some(true) } else { None })
                 .maybe_tag_slug(tag)
-                .order(order.into_iter().collect::<Vec<_>>())
+                .order(order.into_iter().collect())
                 .build();
 
             let events = client.events(&request).await?;

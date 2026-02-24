@@ -15,6 +15,8 @@ use crate::output::ctf as ctf_output;
 
 const USDC_DECIMALS: Decimal = Decimal::from_parts(1_000_000, 0, 0, false, 0);
 
+use super::USDC_ADDRESS_STR;
+
 #[derive(Args)]
 pub struct CtfArgs {
     #[command(subcommand)]
@@ -27,58 +29,58 @@ pub enum CtfCommand {
     Split {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
-        condition: String,
+        condition: B256,
         /// Amount in USDC (e.g. 10 for $10)
         #[arg(long)]
         amount: String,
         /// Collateral token address (defaults to USDC)
-        #[arg(long, default_value = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")]
-        collateral: String,
+        #[arg(long, default_value = USDC_ADDRESS_STR)]
+        collateral: Address,
         /// Custom partition as comma-separated index sets (e.g. "1,2" for binary, "1,2,4" for 3-outcome)
         #[arg(long)]
         partition: Option<String>,
         /// Parent collection ID for nested positions (defaults to zero)
         #[arg(long)]
-        parent_collection: Option<String>,
+        parent_collection: Option<B256>,
     },
     /// Merge outcome tokens back into collateral
     Merge {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
-        condition: String,
+        condition: B256,
         /// Amount in USDC (e.g. 10 for $10)
         #[arg(long)]
         amount: String,
         /// Collateral token address (defaults to USDC)
-        #[arg(long, default_value = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")]
-        collateral: String,
+        #[arg(long, default_value = USDC_ADDRESS_STR)]
+        collateral: Address,
         /// Custom partition as comma-separated index sets (e.g. "1,2" for binary, "1,2,4" for 3-outcome)
         #[arg(long)]
         partition: Option<String>,
         /// Parent collection ID for nested positions (defaults to zero)
         #[arg(long)]
-        parent_collection: Option<String>,
+        parent_collection: Option<B256>,
     },
     /// Redeem winning tokens after market resolution
     Redeem {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
-        condition: String,
+        condition: B256,
         /// Collateral token address (defaults to USDC)
-        #[arg(long, default_value = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")]
-        collateral: String,
+        #[arg(long, default_value = USDC_ADDRESS_STR)]
+        collateral: Address,
         /// Custom index sets as comma-separated values (e.g. "1,2" for binary, "1" for YES only)
         #[arg(long)]
         index_sets: Option<String>,
         /// Parent collection ID for nested positions (defaults to zero)
         #[arg(long)]
-        parent_collection: Option<String>,
+        parent_collection: Option<B256>,
     },
     /// Redeem neg-risk positions
     RedeemNegRisk {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
-        condition: String,
+        condition: B256,
         /// Comma-separated amounts in USDC for each outcome (e.g. "10,5")
         #[arg(long)]
         amounts: String,
@@ -87,10 +89,10 @@ pub enum CtfCommand {
     ConditionId {
         /// Oracle address (0x-prefixed)
         #[arg(long)]
-        oracle: String,
+        oracle: Address,
         /// Question ID (0x-prefixed 32-byte hex)
         #[arg(long)]
-        question: String,
+        question: B256,
         /// Number of outcomes (e.g. 2 for binary)
         #[arg(long)]
         outcomes: u64,
@@ -99,22 +101,22 @@ pub enum CtfCommand {
     CollectionId {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
-        condition: String,
+        condition: B256,
         /// Index set (e.g. 1 for YES, 2 for NO in binary markets)
         #[arg(long)]
         index_set: u64,
         /// Parent collection ID (defaults to zero for top-level positions)
         #[arg(long)]
-        parent_collection: Option<String>,
+        parent_collection: Option<B256>,
     },
     /// Calculate a position ID (ERC1155 token ID) from collateral and collection
     PositionId {
         /// Collateral token address (defaults to USDC)
-        #[arg(long, default_value = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")]
-        collateral: String,
+        #[arg(long, default_value = USDC_ADDRESS_STR)]
+        collateral: Address,
         /// Collection ID (0x-prefixed 32-byte hex)
         #[arg(long)]
-        collection: String,
+        collection: B256,
     },
 }
 
@@ -164,23 +166,10 @@ fn parse_u256_csv(s: &str) -> Result<Vec<U256>> {
         .collect()
 }
 
-fn parse_optional_parent(parent: Option<&str>) -> Result<B256> {
-    match parent {
-        Some(p) => super::parse_condition_id(p),
-        None => Ok(B256::default()),
-    }
-}
+const DEFAULT_BINARY_SETS: [u64; 2] = [1, 2];
 
-fn resolve_collateral(collateral: &str) -> Result<Address> {
-    super::parse_address(collateral)
-}
-
-fn default_partition() -> Vec<U256> {
-    vec![U256::from(1), U256::from(2)]
-}
-
-fn default_index_sets() -> Vec<U256> {
-    vec![U256::from(1), U256::from(2)]
+fn binary_u256_vec() -> Vec<U256> {
+    DEFAULT_BINARY_SETS.iter().map(|&n| U256::from(n)).collect()
 }
 
 pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&str>) -> Result<()> {
@@ -192,22 +181,20 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             partition,
             parent_collection,
         } => {
-            let condition_id = super::parse_condition_id(&condition)?;
             let usdc_amount = parse_usdc_amount(&amount)?;
-            let collateral_addr = resolve_collateral(&collateral)?;
-            let parent = parse_optional_parent(parent_collection.as_deref())?;
+            let parent = parent_collection.unwrap_or_default();
             let partition = match partition {
                 Some(p) => parse_u256_csv(&p)?,
-                None => default_partition(),
+                None => binary_u256_vec(),
             };
 
             let provider = auth::create_provider(private_key).await?;
             let client = ctf::Client::new(provider, POLYGON)?;
 
             let req = SplitPositionRequest::builder()
-                .collateral_token(collateral_addr)
+                .collateral_token(collateral)
                 .parent_collection_id(parent)
-                .condition_id(condition_id)
+                .condition_id(condition)
                 .partition(partition)
                 .amount(usdc_amount)
                 .build();
@@ -226,22 +213,20 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             partition,
             parent_collection,
         } => {
-            let condition_id = super::parse_condition_id(&condition)?;
             let usdc_amount = parse_usdc_amount(&amount)?;
-            let collateral_addr = resolve_collateral(&collateral)?;
-            let parent = parse_optional_parent(parent_collection.as_deref())?;
+            let parent = parent_collection.unwrap_or_default();
             let partition = match partition {
                 Some(p) => parse_u256_csv(&p)?,
-                None => default_partition(),
+                None => binary_u256_vec(),
             };
 
             let provider = auth::create_provider(private_key).await?;
             let client = ctf::Client::new(provider, POLYGON)?;
 
             let req = MergePositionsRequest::builder()
-                .collateral_token(collateral_addr)
+                .collateral_token(collateral)
                 .parent_collection_id(parent)
-                .condition_id(condition_id)
+                .condition_id(condition)
                 .partition(partition)
                 .amount(usdc_amount)
                 .build();
@@ -259,21 +244,19 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             index_sets,
             parent_collection,
         } => {
-            let condition_id = super::parse_condition_id(&condition)?;
-            let collateral_addr = resolve_collateral(&collateral)?;
-            let parent = parse_optional_parent(parent_collection.as_deref())?;
+            let parent = parent_collection.unwrap_or_default();
             let index_sets = match index_sets {
                 Some(s) => parse_u256_csv(&s)?,
-                None => default_index_sets(),
+                None => binary_u256_vec(),
             };
 
             let provider = auth::create_provider(private_key).await?;
             let client = ctf::Client::new(provider, POLYGON)?;
 
             let req = RedeemPositionsRequest::builder()
-                .collateral_token(collateral_addr)
+                .collateral_token(collateral)
                 .parent_collection_id(parent)
-                .condition_id(condition_id)
+                .condition_id(condition)
                 .index_sets(index_sets)
                 .build();
 
@@ -285,14 +268,13 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             ctf_output::print_tx_result("redeem", resp.transaction_hash, resp.block_number, &output)
         }
         CtfCommand::RedeemNegRisk { condition, amounts } => {
-            let condition_id = super::parse_condition_id(&condition)?;
             let amounts = parse_usdc_amounts(&amounts)?;
 
             let provider = auth::create_provider(private_key).await?;
             let client = ctf::Client::with_neg_risk(provider, POLYGON)?;
 
             let req = RedeemNegRiskRequest::builder()
-                .condition_id(condition_id)
+                .condition_id(condition)
                 .amounts(amounts)
                 .build();
 
@@ -313,15 +295,12 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             question,
             outcomes,
         } => {
-            let oracle_addr = super::parse_address(&oracle)?;
-            let question_id = super::parse_condition_id(&question)?;
-
             let provider = auth::create_readonly_provider().await?;
             let client = ctf::Client::new(provider, POLYGON)?;
 
             let req = ConditionIdRequest::builder()
-                .oracle(oracle_addr)
-                .question_id(question_id)
+                .oracle(oracle)
+                .question_id(question)
                 .outcome_slot_count(U256::from(outcomes))
                 .build();
 
@@ -333,15 +312,14 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             index_set,
             parent_collection,
         } => {
-            let condition_id = super::parse_condition_id(&condition)?;
-            let parent = parse_optional_parent(parent_collection.as_deref())?;
+            let parent = parent_collection.unwrap_or_default();
 
             let provider = auth::create_readonly_provider().await?;
             let client = ctf::Client::new(provider, POLYGON)?;
 
             let req = CollectionIdRequest::builder()
                 .parent_collection_id(parent)
-                .condition_id(condition_id)
+                .condition_id(condition)
                 .index_set(U256::from(index_set))
                 .build();
 
@@ -352,15 +330,12 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             collateral,
             collection,
         } => {
-            let collateral_addr = super::parse_address(&collateral)?;
-            let collection_id = super::parse_condition_id(&collection)?;
-
             let provider = auth::create_readonly_provider().await?;
             let client = ctf::Client::new(provider, POLYGON)?;
 
             let req = PositionIdRequest::builder()
-                .collateral_token(collateral_addr)
-                .collection_id(collection_id)
+                .collateral_token(collateral)
+                .collection_id(collection)
                 .build();
 
             let resp = client.position_id(&req).await?;
@@ -503,32 +478,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_optional_parent_none_is_zero() {
-        let result = parse_optional_parent(None).unwrap();
-        assert_eq!(result, B256::default());
-    }
-
-    #[test]
-    fn parse_optional_parent_some_parses() {
-        let hex = "0x0000000000000000000000000000000000000000000000000000000000000001";
-        let result = parse_optional_parent(Some(hex)).unwrap();
-        assert_ne!(result, B256::default());
-    }
-
-    #[test]
-    fn parse_optional_parent_invalid_fails() {
-        assert!(parse_optional_parent(Some("garbage")).is_err());
-    }
-
-    #[test]
-    fn default_partition_is_binary() {
-        let p = default_partition();
+    fn binary_u256_vec_is_binary() {
+        let p = binary_u256_vec();
         assert_eq!(p, vec![U256::from(1u64), U256::from(2u64)]);
-    }
-
-    #[test]
-    fn default_index_sets_is_binary() {
-        let s = default_index_sets();
-        assert_eq!(s, vec![U256::from(1u64), U256::from(2u64)]);
     }
 }

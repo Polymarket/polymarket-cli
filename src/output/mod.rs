@@ -43,6 +43,16 @@ pub fn format_decimal(n: Decimal) -> String {
     }
 }
 
+pub fn active_status(closed: Option<bool>, active: Option<bool>) -> &'static str {
+    if closed == Some(true) {
+        "Closed"
+    } else if active == Some(true) {
+        "Active"
+    } else {
+        "Inactive"
+    }
+}
+
 pub fn print_json(data: &impl serde::Serialize) -> anyhow::Result<()> {
     println!("{}", serde_json::to_string_pretty(data)?);
     Ok(())

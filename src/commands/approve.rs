@@ -12,6 +12,7 @@ use crate::auth;
 use crate::output::OutputFormat;
 use crate::output::approve::{ApprovalStatus, print_approval_status, print_tx_result};
 
+/// Must match `USDC_ADDRESS_STR` in commands/mod.rs.
 const USDC_ADDRESS: Address = address!("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174");
 
 sol! {
@@ -39,7 +40,7 @@ pub enum ApproveCommand {
     /// Check current contract approvals for a wallet
     Check {
         /// Wallet address to check (defaults to configured wallet)
-        address: Option<String>,
+        address: Option<Address>,
     },
     /// Approve all required contracts for trading (sends on-chain transactions)
     Set,
@@ -82,18 +83,18 @@ pub async fn execute(
     private_key: Option<&str>,
 ) -> Result<()> {
     match args.command {
-        ApproveCommand::Check { address } => check(address.as_deref(), private_key, output).await,
+        ApproveCommand::Check { address } => check(address, private_key, output).await,
         ApproveCommand::Set => set(private_key, output).await,
     }
 }
 
 async fn check(
-    address_arg: Option<&str>,
+    address_arg: Option<Address>,
     private_key: Option<&str>,
     output: OutputFormat,
 ) -> Result<()> {
     let owner: Address = if let Some(addr) = address_arg {
-        super::parse_address(addr)?
+        addr
     } else {
         let signer = auth::resolve_signer(private_key)?;
         polymarket_client_sdk::auth::Signer::address(&signer)

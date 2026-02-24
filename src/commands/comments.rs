@@ -1,4 +1,3 @@
-use super::parse_address;
 use crate::output::comments::{print_comment_detail, print_comments_table};
 use crate::output::{OutputFormat, print_json};
 use anyhow::Result;
@@ -55,7 +54,7 @@ pub enum CommentsCommand {
     /// List comments by a user's wallet address
     ByUser {
         /// Wallet address (0x...)
-        address: String,
+        address: polymarket_client_sdk::types::Address,
 
         /// Max results
         #[arg(long, default_value = "25")]
@@ -144,9 +143,8 @@ pub async fn execute(
             order,
             ascending,
         } => {
-            let addr = parse_address(&address)?;
             let request = CommentsByUserAddressRequest::builder()
-                .user_address(addr)
+                .user_address(address)
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)

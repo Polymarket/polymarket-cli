@@ -1,4 +1,3 @@
-use super::parse_address;
 use crate::output::OutputFormat;
 use crate::output::bridge::{print_deposit, print_status, print_supported_assets};
 use anyhow::Result;
@@ -19,7 +18,7 @@ pub enum BridgeCommand {
     /// Get deposit addresses for a wallet (EVM, Solana, Bitcoin)
     Deposit {
         /// Polymarket wallet address (0x...)
-        address: String,
+        address: polymarket_client_sdk::types::Address,
     },
 
     /// List supported chains and tokens for deposits
@@ -40,7 +39,7 @@ pub async fn execute(
     match args.command {
         BridgeCommand::Deposit { address } => {
             let request = DepositRequest::builder()
-                .address(parse_address(&address)?)
+                .address(address)
                 .build();
 
             let response = client.deposit(&request).await?;
