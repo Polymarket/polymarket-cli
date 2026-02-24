@@ -137,7 +137,7 @@ Errors follow the same pattern — table mode prints `Error: ...` to stderr, JSO
 ```bash
 # List markets with filters
 polymarket markets list --limit 10
-polymarket markets list --active true --order volume_num
+polymarket markets list --active true --order volume
 polymarket markets list --closed false --limit 50 --offset 25
 
 # Get a single market by ID or slug
