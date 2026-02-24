@@ -11,7 +11,7 @@ use polymarket_client_sdk::gamma::{
     },
 };
 
-use super::is_numeric_id;
+use super::{ResolvedId, resolve_id};
 use crate::output::markets::{print_market_detail, print_markets_table};
 use crate::output::tags::print_tags_table;
 use crate::output::{OutputFormat, print_json};
@@ -53,7 +53,7 @@ pub enum MarketsCommand {
 
     /// Get a single market by ID or slug
     Get {
-        /// Market ID (numeric) or slug
+        /// Market ID (numeric), slug, or Polymarket URL
         id: String,
     },
 
@@ -107,13 +107,15 @@ pub async fn execute(
         }
 
         MarketsCommand::Get { id } => {
-            let is_numeric = is_numeric_id(&id);
-            let market = if is_numeric {
-                let req = MarketByIdRequest::builder().id(id).build();
-                client.market_by_id(&req).await?
-            } else {
-                let req = MarketBySlugRequest::builder().slug(id).build();
-                client.market_by_slug(&req).await?
+            let market = match resolve_id(&id, true) {
+                ResolvedId::Numeric(n) => {
+                    let req = MarketByIdRequest::builder().id(n).build();
+                    client.market_by_id(&req).await?
+                }
+                ResolvedId::Slug(slug) => {
+                    let req = MarketBySlugRequest::builder().slug(slug).build();
+                    client.market_by_slug(&req).await?
+                }
             };
 
             match output {

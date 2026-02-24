@@ -486,3 +486,34 @@ fn wallet_address_succeeds_or_fails_gracefully() {
     // Either succeeds or fails with an error message — not a panic
     assert!(output.status.success() || !output.stderr.is_empty());
 }
+
+#[test]
+fn markets_get_accepts_url() {
+    // Verify the CLI accepts a Polymarket URL without argument-level rejection.
+    // The command will fail at the API level (nonexistent slug), but that's fine —
+    // the point is it doesn't fail at argument parsing.
+    let output = polymarket()
+        .args([
+            "markets",
+            "get",
+            "https://polymarket.com/event/test-event/test-market",
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("error: invalid value"), "stderr: {stderr}");
+}
+
+#[test]
+fn events_get_accepts_url() {
+    let output = polymarket()
+        .args([
+            "events",
+            "get",
+            "https://polymarket.com/event/test-event/test-market",
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("error: invalid value"), "stderr: {stderr}");
+}
