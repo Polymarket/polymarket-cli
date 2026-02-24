@@ -96,7 +96,10 @@ async fn list_markets(
     active: Option<bool>,
     closed: Option<bool>,
 ) -> Result<Vec<Market>> {
-    let page_size = limit.max(1);
+    if limit <= 0 {
+        return Ok(Vec::new());
+    }
+    let page_size = limit;
     let mut next_offset = offset.unwrap_or(0);
     let mut collected: Vec<Market> = Vec::new();
 
