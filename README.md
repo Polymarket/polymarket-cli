@@ -467,6 +467,10 @@ if ! result=$(polymarket -o json clob balance --asset-type collateral 2>/dev/nul
 fi
 ```
 
+## Agentic AI Skill
+
+This repository includes a [AI Skill](https://skills.sh/) at `.agents/skills/polymarket-cli/` that enables AI agents to operate the CLI on your behalf. Copy the skill into your project or reference it from your Claude Code configuration to let Claude browse markets, place orders, manage wallets, and interact with Polymarket contracts using natural language.
+
 ## Architecture
 
 ```
