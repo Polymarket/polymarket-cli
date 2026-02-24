@@ -44,7 +44,7 @@ jobs:
       - name: Set version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          sed -i'' -e "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
 
       - name: Build
         run: |
@@ -98,12 +98,13 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          cargo update --workspace
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/polymarket.rb Cargo.toml
+          git add Formula/polymarket.rb Cargo.toml Cargo.lock
           git diff --cached --quiet && echo "Nothing to commit" || {
             git commit -m "release: update formula and version to ${{ github.ref_name }}"
             git push
