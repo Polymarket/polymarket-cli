@@ -6,7 +6,7 @@ use super::{OutputFormat, print_detail_table};
 pub fn print_tx_result(
     operation: &str,
     tx_hash: B256,
-    block_number: u64,
+    block_number: Option<u64>,
     output: &OutputFormat,
 ) -> Result<()> {
     match output {
@@ -21,15 +21,17 @@ pub fn print_tx_result(
             Ok(())
         }
         OutputFormat::Table => {
-            let rows = vec![
+            let mut rows = vec![
                 ["Operation".into(), operation.to_string()],
                 ["Tx Hash".into(), format!("{tx_hash}")],
-                ["Block".into(), block_number.to_string()],
-                [
-                    "Polygonscan".into(),
-                    format!("https://polygonscan.com/tx/{tx_hash}"),
-                ],
             ];
+            if let Some(block) = block_number {
+                rows.push(["Block".into(), block.to_string()]);
+            }
+            rows.push([
+                "Polygonscan".into(),
+                format!("https://polygonscan.com/tx/{tx_hash}"),
+            ]);
             print_detail_table(rows);
             Ok(())
         }
