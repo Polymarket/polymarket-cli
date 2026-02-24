@@ -74,6 +74,23 @@ pub enum MarketsCommand {
     },
 }
 
+fn apply_status_filters(
+    markets: Vec<Market>,
+    active_filter: Option<bool>,
+    closed_filter: Option<bool>,
+) -> Vec<Market> {
+    markets
+        .into_iter()
+        .filter(|market| {
+            flag_matches(market.active, active_filter) && flag_matches(market.closed, closed_filter)
+        })
+        .collect()
+}
+
+fn flag_matches(value: Option<bool>, filter: Option<bool>) -> bool {
+    filter.is_none_or(|expected| value == Some(expected))
+}
+
 pub async fn execute(
     client: &gamma::Client,
     args: MarketsArgs,
@@ -88,17 +105,15 @@ pub async fn execute(
             order,
             ascending,
         } => {
-            let resolved_closed = closed.or_else(|| active.map(|a| !a));
-
             let request = MarketsRequest::builder()
                 .limit(limit)
-                .maybe_closed(resolved_closed)
+                .maybe_closed(closed)
                 .maybe_offset(offset)
                 .maybe_order(order)
                 .maybe_ascending(if ascending { Some(true) } else { None })
                 .build();
 
-            let markets = client.markets(&request).await?;
+            let markets = apply_status_filters(client.markets(&request).await?, active, closed);
 
             match output {
                 OutputFormat::Table => print_markets_table(&markets),
@@ -155,4 +170,41 @@ pub async fn execute(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_status_filters;
+    use polymarket_client_sdk::gamma::types::response::Market;
+    use serde_json::json;
+
+    fn make_market(value: serde_json::Value) -> Market {
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn status_filters_are_independent() {
+        let markets = vec![
+            make_market(json!({"id":"1", "active": true, "closed": true})),
+            make_market(json!({"id":"2", "active": false, "closed": true})),
+            make_market(json!({"id":"3", "active": false, "closed": false})),
+        ];
+
+        let filtered = apply_status_filters(markets, Some(false), Some(true));
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, "2");
+    }
+
+    #[test]
+    fn active_filter_does_not_imply_closed_filter() {
+        let markets = vec![
+            make_market(json!({"id":"1", "active": false, "closed": true})),
+            make_market(json!({"id":"2", "active": false, "closed": false})),
+        ];
+
+        let filtered = apply_status_filters(markets, Some(false), None);
+
+        assert_eq!(filtered.len(), 2);
+    }
 }

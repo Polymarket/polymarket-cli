@@ -19,9 +19,9 @@ pub struct CommentsArgs {
 
 #[derive(Subcommand)]
 pub enum CommentsCommand {
-    /// List comments on an event, market, or series
+    /// List comments on an event or series
     List {
-        /// Parent entity type: event, market, or series
+        /// Parent entity type: event or series
         #[arg(long)]
         entity_type: EntityType,
 
@@ -78,7 +78,6 @@ pub enum CommentsCommand {
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum EntityType {
     Event,
-    Market,
     Series,
 }
 
@@ -86,7 +85,6 @@ impl From<EntityType> for ParentEntityType {
     fn from(e: EntityType) -> Self {
         match e {
             EntityType::Event => ParentEntityType::Event,
-            EntityType::Market => ParentEntityType::Market,
             EntityType::Series => ParentEntityType::Series,
         }
     }
@@ -163,4 +161,24 @@ pub async fn execute(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EntityType;
+    use clap::ValueEnum;
+
+    #[test]
+    fn entity_type_does_not_expose_market_variant() {
+        let names: Vec<String> = EntityType::value_variants()
+            .iter()
+            .filter_map(|variant| {
+                variant
+                    .to_possible_value()
+                    .map(|value| value.get_name().to_string())
+            })
+            .collect();
+
+        assert!(!names.iter().any(|name| name == "market"));
+    }
 }

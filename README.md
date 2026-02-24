@@ -100,9 +100,9 @@ polymarket markets list --limit 2
 ```
 
 ```
- Question                            Price (Yes)  Volume   Liquidity  Status
- Will Trump win the 2024 election?   52.00¢       $145.2M  $1.2M      Active
- Will BTC hit $100k by Dec 2024?     67.30¢       $89.4M   $430.5K    Active
+ Question                            Price        Volume   Liquidity  Status
+ Will Trump win the 2024 election?   Yes: 52.00¢  $145.2M  $1.2M      Active
+ Will BTC hit $100k by Dec 2024?     Yes: 67.30¢  $89.4M   $430.5K    Active
 ```
 
 ```bash

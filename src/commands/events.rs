@@ -2,7 +2,10 @@ use anyhow::Result;
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::gamma::{
     self,
-    types::request::{EventByIdRequest, EventBySlugRequest, EventTagsRequest, EventsRequest},
+    types::{
+        request::{EventByIdRequest, EventBySlugRequest, EventTagsRequest, EventsRequest},
+        response::Event,
+    },
 };
 
 use super::is_numeric_id;
@@ -62,6 +65,23 @@ pub enum EventsCommand {
     },
 }
 
+fn apply_status_filters(
+    events: Vec<Event>,
+    active_filter: Option<bool>,
+    closed_filter: Option<bool>,
+) -> Vec<Event> {
+    events
+        .into_iter()
+        .filter(|event| {
+            flag_matches(event.active, active_filter) && flag_matches(event.closed, closed_filter)
+        })
+        .collect()
+}
+
+fn flag_matches(value: Option<bool>, filter: Option<bool>) -> bool {
+    filter.is_none_or(|expected| value == Some(expected))
+}
+
 pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFormat) -> Result<()> {
     match args.command {
         EventsCommand::List {
@@ -73,18 +93,17 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
             ascending,
             tag,
         } => {
-            let resolved_closed = closed.or_else(|| active.map(|a| !a));
-
             let request = EventsRequest::builder()
                 .limit(limit)
-                .maybe_closed(resolved_closed)
+                .maybe_active(active)
+                .maybe_closed(closed)
                 .maybe_offset(offset)
                 .maybe_ascending(if ascending { Some(true) } else { None })
                 .maybe_tag_slug(tag)
                 .order(order.into_iter().collect::<Vec<_>>())
                 .build();
 
-            let events = client.events(&request).await?;
+            let events = apply_status_filters(client.events(&request).await?, active, closed);
 
             match output {
                 OutputFormat::Table => print_events_table(&events),
@@ -120,4 +139,41 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_status_filters;
+    use polymarket_client_sdk::gamma::types::response::Event;
+    use serde_json::json;
+
+    fn make_event(value: serde_json::Value) -> Event {
+        serde_json::from_value(value).unwrap()
+    }
+
+    #[test]
+    fn status_filters_are_independent() {
+        let events = vec![
+            make_event(json!({"id":"1", "active": true, "closed": true})),
+            make_event(json!({"id":"2", "active": false, "closed": true})),
+            make_event(json!({"id":"3", "active": false, "closed": false})),
+        ];
+
+        let filtered = apply_status_filters(events, Some(false), Some(true));
+
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, "2");
+    }
+
+    #[test]
+    fn active_filter_does_not_imply_closed_filter() {
+        let events = vec![
+            make_event(json!({"id":"1", "active": false, "closed": true})),
+            make_event(json!({"id":"2", "active": false, "closed": false})),
+        ];
+
+        let filtered = apply_status_filters(events, Some(false), None);
+
+        assert_eq!(filtered.len(), 2);
+    }
 }
