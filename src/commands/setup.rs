@@ -85,32 +85,30 @@ pub fn execute() -> Result<()> {
     step_header(1, total, "Wallet");
 
     let address = if config::config_exists() || config::keystore_exists() {
-        // Try plaintext config first, then encrypted keystore
-        let existing_addr = {
-            let (key, _) = config::resolve_key(None);
-            key.as_deref()
+        // Try plaintext config / env var / flag first, then encrypted keystore
+        let (existing_addr, source) = {
+            let (key, src) = config::resolve_key(None);
+            let addr = key
+                .as_deref()
                 .and_then(|k| LocalSigner::from_str(k).ok())
-                .map(|s| s.address())
-        }
-        .or_else(|| {
-            if config::keystore_exists() {
-                crate::password::prompt_password_with_retries(|pw| {
-                    config::load_key_encrypted(pw)
-                })
-                .ok()
-                .and_then(|k| LocalSigner::from_str(&k).ok())
-                .map(|s| s.address())
-            } else {
-                None
-            }
-        });
+                .map(|s| s.address());
+            (addr, src)
+        };
+        let (existing_addr, source) = if existing_addr.is_some() {
+            (existing_addr, source)
+        } else if config::keystore_exists() {
+            let addr = crate::password::prompt_password_with_retries(|pw| {
+                config::load_key_encrypted(pw)
+            })
+            .ok()
+            .and_then(|k| LocalSigner::from_str(&k).ok())
+            .map(|s| s.address());
+            (addr, config::KeySource::Keystore)
+        } else {
+            (None, source)
+        };
 
         if let Some(addr) = existing_addr {
-            let source = if config::keystore_exists() {
-                config::KeySource::Keystore
-            } else {
-                config::KeySource::ConfigFile
-            };
             println!("  ✓ Wallet already configured ({})", source.label());
             println!("    Address: {addr}");
             println!();
