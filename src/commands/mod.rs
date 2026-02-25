@@ -8,6 +8,7 @@ pub mod ctf;
 pub mod data;
 pub mod events;
 pub mod markets;
+pub mod metengine;
 pub mod profiles;
 pub mod series;
 pub mod setup;
