@@ -98,11 +98,14 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
     }
 
+    // Preserve existing proxy setting from config file
+    let existing_proxy = load_config().and_then(|c| c.proxy);
+
     let config = Config {
         private_key: key.to_string(),
         chain_id,
         signature_type: signature_type.to_string(),
-        proxy: None,
+        proxy: existing_proxy,
     };
     let json = serde_json::to_string_pretty(&config)?;
     let path = config_path()?;
@@ -157,7 +160,9 @@ pub fn resolve_key(cli_flag: Option<&str>) -> (Option<String>, KeySource) {
         return (Some(key), KeySource::EnvVar);
     }
     if let Some(config) = load_config() {
-        return (Some(config.private_key), KeySource::ConfigFile);
+        if !config.private_key.is_empty() {
+            return (Some(config.private_key), KeySource::ConfigFile);
+        }
     }
     (None, KeySource::None)
 }
