@@ -70,19 +70,32 @@ enum Commands {
     Upgrade,
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
+    // Resolve proxy BEFORE tokio spawns worker threads.
+    // Parse CLI args early (sync) to get --proxy flag.
     let cli = Cli::parse();
-    let output = cli.output;
 
-    // Apply proxy: --proxy flag > POLYMARKET_PROXY env > config file proxy field
+    // Apply proxy: --proxy flag > POLYMARKET_PROXY env > config file proxy field.
+    // Only set HTTP(S)_PROXY for CLOB/Gamma API calls.
+    // Exclude the Polygon RPC so alloy (which uses reqwest 0.12 without socks
+    // support) can still reach the RPC directly.
     if let Some(ref url) = config::resolve_proxy(cli.proxy.as_deref()) {
-        // SAFETY: called before any threads are spawned by the async runtime
-        unsafe { std::env::set_var("HTTPS_PROXY", url); }
-        unsafe { std::env::set_var("HTTP_PROXY", url); }
+        // SAFETY: no threads exist yet — called before tokio runtime is built.
+        unsafe {
+            std::env::set_var("HTTPS_PROXY", url);
+            std::env::set_var("HTTP_PROXY", url);
+            std::env::set_var("NO_PROXY", "polygon.drpc.org,drpc.org");
+        }
     }
 
-    if let Err(e) = run(cli).await {
+    let output = cli.output;
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to build tokio runtime");
+
+    if let Err(e) = runtime.block_on(run(cli)) {
         match output {
             OutputFormat::Json => {
                 println!("{}", serde_json::json!({"error": e.to_string()}));
