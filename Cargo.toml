@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 polymarket-client-sdk = { version = "0.4", features = ["gamma", "data", "bridge", "clob", "ctf"] }
-alloy = { version = "1.6.3", default-features = false, features = ["providers", "sol-types", "contract", "reqwest", "reqwest-rustls-tls", "signer-local", "signers"] }
+alloy = { version = "1.6.3", default-features = false, features = ["providers", "sol-types", "contract", "reqwest", "reqwest-rustls-tls", "signer-local", "signers", "signer-keystore"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 serde_json = "1"
@@ -26,6 +26,9 @@ anyhow = "1"
 chrono = "0.4"
 dirs = "6"
 rustyline = "15"
+rpassword = "7"
+rand = "0.8"
+secrecy = "0.10"
 
 [dev-dependencies]
 assert_cmd = "2"

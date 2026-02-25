@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use polymarket_client_sdk::auth::{LocalSigner, Signer as _};
 use polymarket_client_sdk::types::Address;
 use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use secrecy::{ExposeSecret, SecretString};
 
 use super::wallet::normalize_key;
 use crate::config;
@@ -84,12 +85,31 @@ pub fn execute() -> Result<()> {
 
     step_header(1, total, "Wallet");
 
-    let address = if config::config_exists() {
-        let (key, source) = config::resolve_key(None);
-        if let Some(k) = &key
-            && let Ok(signer) = LocalSigner::from_str(k)
-        {
-            let addr = signer.address();
+    let address = if config::config_exists() || config::keystore_exists() {
+        // Try plaintext config / env var / flag first, then encrypted keystore
+        let (existing_addr, source) = {
+            let (key, src) = config::resolve_key(None);
+            let addr = key
+                .as_ref()
+                .and_then(|k| LocalSigner::from_str(k.expose_secret()).ok())
+                .map(|s| s.address());
+            (addr, src)
+        };
+        let (existing_addr, source) = if existing_addr.is_some() {
+            (existing_addr, source)
+        } else if config::keystore_exists() {
+            let addr = crate::password::prompt_password_with_retries(|pw| {
+                config::load_key_encrypted(pw)
+            })
+            .ok()
+            .and_then(|k| LocalSigner::from_str(k.expose_secret()).ok())
+            .map(|s| s.address());
+            (addr, config::KeySource::Keystore)
+        } else {
+            (None, source)
+        };
+
+        if let Some(addr) = existing_addr {
             println!("  ✓ Wallet already configured ({})", source.label());
             println!("    Address: {addr}");
             println!();
@@ -119,7 +139,7 @@ fn setup_wallet() -> Result<Address> {
         let signer = LocalSigner::from_str(&normalized)
             .context("Invalid private key")?
             .with_chain_id(Some(POLYGON));
-        (signer.address(), normalized)
+        (signer.address(), SecretString::from(normalized))
     } else {
         let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
         let address = signer.address();
@@ -129,10 +149,12 @@ fn setup_wallet() -> Result<Address> {
         for b in &bytes {
             write!(hex, "{b:02x}").unwrap();
         }
-        (address, hex)
+        (address, SecretString::from(hex))
     };
 
-    config::save_wallet(&key_hex, POLYGON, config::DEFAULT_SIGNATURE_TYPE)?;
+    let password = crate::password::prompt_new_password()?;
+    config::save_key_encrypted(&key_hex, &password)?;
+    config::save_wallet_settings(POLYGON, config::DEFAULT_SIGNATURE_TYPE)?;
 
     if has_key {
         println!("  ✓ Wallet imported");
@@ -144,7 +166,7 @@ fn setup_wallet() -> Result<Address> {
 
     if !has_key {
         println!();
-        println!("  ⚠ Back up your private key from the config file.");
+        println!("  ⚠ Remember your password. Use `polymarket wallet export` to back up your key.");
         println!("    If lost, your funds cannot be recovered.");
     }
 
