@@ -23,6 +23,7 @@ serde = { version = "1", features = ["derive"] }
 tabled = "0.17"
 rust_decimal = "1"
 anyhow = "1"
+reqwest = { version = "0.13", features = ["socks"] }
 chrono = "0.4"
 dirs = "6"
 rustyline = "15"

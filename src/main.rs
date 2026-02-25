@@ -26,6 +26,10 @@ pub(crate) struct Cli {
     /// Signature type: eoa, proxy, or gnosis-safe
     #[arg(long, global = true)]
     signature_type: Option<String>,
+
+    /// SOCKS5 or HTTP proxy URL (e.g., socks5://127.0.0.1:1080)
+    #[arg(long, global = true)]
+    proxy: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -70,6 +74,17 @@ enum Commands {
 async fn main() -> ExitCode {
     let cli = Cli::parse();
     let output = cli.output;
+
+    // Apply proxy: --proxy flag > POLYMARKET_PROXY > ALL_PROXY (already set by user)
+    let proxy_url = cli.proxy
+        .as_deref()
+        .map(String::from)
+        .or_else(|| std::env::var("POLYMARKET_PROXY").ok());
+    if let Some(ref url) = proxy_url {
+        // SAFETY: called before any threads are spawned by the async runtime
+        unsafe { std::env::set_var("HTTPS_PROXY", url); }
+        unsafe { std::env::set_var("HTTP_PROXY", url); }
+    }
 
     if let Err(e) = run(cli).await {
         match output {
