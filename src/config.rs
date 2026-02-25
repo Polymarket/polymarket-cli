@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
 const SIG_TYPE_ENV_VAR: &str = "POLYMARKET_SIGNATURE_TYPE";
+const PROXY_ENV_VAR: &str = "POLYMARKET_PROXY";
 pub const DEFAULT_SIGNATURE_TYPE: &str = "proxy";
 
 pub const NO_WALLET_MSG: &str =
@@ -13,10 +14,13 @@ pub const NO_WALLET_MSG: &str =
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
+    #[serde(default)]
     pub private_key: String,
     pub chain_id: u64,
     #[serde(default = "default_signature_type")]
     pub signature_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<String>,
 }
 
 fn default_signature_type() -> String {
@@ -98,6 +102,7 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
         private_key: key.to_string(),
         chain_id,
         signature_type: signature_type.to_string(),
+        proxy: None,
     };
     let json = serde_json::to_string_pretty(&config)?;
     let path = config_path()?;
@@ -125,6 +130,22 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
     Ok(())
 }
 
+
+/// Priority: CLI flag > env var > config file.
+pub fn resolve_proxy(cli_flag: Option<&str>) -> Option<String> {
+    if let Some(url) = cli_flag {
+        return Some(url.to_string());
+    }
+    if let Ok(url) = std::env::var(PROXY_ENV_VAR)
+        && !url.is_empty()
+    {
+        return Some(url);
+    }
+    if let Some(config) = load_config() {
+        return config.proxy;
+    }
+    None
+}
 /// Priority: CLI flag > env var > config file.
 pub fn resolve_key(cli_flag: Option<&str>) -> (Option<String>, KeySource) {
     if let Some(key) = cli_flag {

@@ -75,12 +75,8 @@ async fn main() -> ExitCode {
     let cli = Cli::parse();
     let output = cli.output;
 
-    // Apply proxy: --proxy flag > POLYMARKET_PROXY > ALL_PROXY (already set by user)
-    let proxy_url = cli.proxy
-        .as_deref()
-        .map(String::from)
-        .or_else(|| std::env::var("POLYMARKET_PROXY").ok());
-    if let Some(ref url) = proxy_url {
+    // Apply proxy: --proxy flag > POLYMARKET_PROXY env > config file proxy field
+    if let Some(ref url) = config::resolve_proxy(cli.proxy.as_deref()) {
         // SAFETY: called before any threads are spawned by the async runtime
         unsafe { std::env::set_var("HTTPS_PROXY", url); }
         unsafe { std::env::set_var("HTTP_PROXY", url); }
