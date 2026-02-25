@@ -5,10 +5,26 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::auth::LocalSigner;
 use polymarket_client_sdk::auth::Signer as _;
-use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use polymarket_client_sdk::{POLYGON, derive_proxy_wallet, derive_safe_wallet};
 
 use crate::config;
 use crate::output::OutputFormat;
+
+/// Derive the trading wallet address based on the configured signature type.
+/// - "proxy" → Polymarket Proxy wallet (Magic/email)
+/// - "gnosis-safe" → Gnosis Safe wallet (browser/MetaMask)
+/// - anything else (e.g. "eoa") → None (the EOA itself is used)
+pub(crate) fn derive_trading_wallet(
+    address: polymarket_client_sdk::types::Address,
+    chain_id: u64,
+    signature_type: &str,
+) -> Option<polymarket_client_sdk::types::Address> {
+    match signature_type {
+        "proxy" => derive_proxy_wallet(address, chain_id),
+        "gnosis-safe" => derive_safe_wallet(address, chain_id),
+        _ => None,
+    }
+}
 
 #[derive(Args)]
 pub struct WalletArgs {
@@ -103,7 +119,7 @@ fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Resul
 
     config::save_wallet(&key_hex, POLYGON, signature_type)?;
     let config_path = config::config_path()?;
-    let proxy_addr = derive_proxy_wallet(address, POLYGON);
+    let trading_addr = derive_trading_wallet(address, POLYGON, signature_type);
 
     match output {
         OutputFormat::Json => {
@@ -111,7 +127,7 @@ fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Resul
                 "{}",
                 serde_json::json!({
                     "address": address.to_string(),
-                    "proxy_address": proxy_addr.map(|a| a.to_string()),
+                    "trading_wallet": trading_addr.map(|a| a.to_string()),
                     "signature_type": signature_type,
                     "config_path": config_path.display().to_string(),
                 })
@@ -120,8 +136,8 @@ fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Resul
         OutputFormat::Table => {
             println!("Wallet created successfully!");
             println!("Address:        {address}");
-            if let Some(proxy) = proxy_addr {
-                println!("Proxy wallet:   {proxy}");
+            if let Some(tw) = trading_addr {
+                println!("Trading wallet: {tw}");
             }
             println!("Signature type: {signature_type}");
             println!("Config:         {}", config_path.display());
@@ -144,7 +160,7 @@ fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &st
 
     config::save_wallet(&normalized, POLYGON, signature_type)?;
     let config_path = config::config_path()?;
-    let proxy_addr = derive_proxy_wallet(address, POLYGON);
+    let trading_addr = derive_trading_wallet(address, POLYGON, signature_type);
 
     match output {
         OutputFormat::Json => {
@@ -152,7 +168,7 @@ fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &st
                 "{}",
                 serde_json::json!({
                     "address": address.to_string(),
-                    "proxy_address": proxy_addr.map(|a| a.to_string()),
+                    "trading_wallet": trading_addr.map(|a| a.to_string()),
                     "signature_type": signature_type,
                     "config_path": config_path.display().to_string(),
                 })
@@ -161,8 +177,8 @@ fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &st
         OutputFormat::Table => {
             println!("Wallet imported successfully!");
             println!("Address:        {address}");
-            if let Some(proxy) = proxy_addr {
-                println!("Proxy wallet:   {proxy}");
+            if let Some(tw) = trading_addr {
+                println!("Trading wallet: {tw}");
             }
             println!("Signature type: {signature_type}");
             println!("Config:         {}", config_path.display());
@@ -193,12 +209,13 @@ fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()>
     let (key, source) = config::resolve_key(private_key_flag);
     let signer = key.as_deref().and_then(|k| LocalSigner::from_str(k).ok());
     let address = signer.as_ref().map(|s| s.address().to_string());
-    let proxy_addr = signer
-        .as_ref()
-        .and_then(|s| derive_proxy_wallet(s.address(), POLYGON))
-        .map(|a| a.to_string());
 
     let sig_type = config::resolve_signature_type(None);
+    let trading_addr = signer
+        .as_ref()
+        .and_then(|s| derive_trading_wallet(s.address(), POLYGON, &sig_type))
+        .map(|a| a.to_string());
+
     let config_path = config::config_path()?;
 
     match output {
@@ -207,7 +224,7 @@ fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()>
                 "{}",
                 serde_json::json!({
                     "address": address,
-                    "proxy_address": proxy_addr,
+                    "trading_wallet": trading_addr,
                     "signature_type": sig_type,
                     "config_path": config_path.display().to_string(),
                     "source": source.label(),
@@ -220,8 +237,8 @@ fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()>
                 Some(addr) => println!("Address:        {addr}"),
                 None => println!("Address:        (not configured)"),
             }
-            if let Some(proxy) = &proxy_addr {
-                println!("Proxy wallet:   {proxy}");
+            if let Some(tw) = &trading_addr {
+                println!("Trading wallet: {tw}");
             }
             println!("Signature type: {sig_type}");
             println!("Config path:    {}", config_path.display());

@@ -5,9 +5,9 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use polymarket_client_sdk::auth::{LocalSigner, Signer as _};
 use polymarket_client_sdk::types::Address;
-use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use polymarket_client_sdk::POLYGON;
 
-use super::wallet::normalize_key;
+use super::wallet::{derive_trading_wallet, normalize_key};
 use crate::config;
 
 fn print_banner() {
@@ -154,18 +154,18 @@ fn setup_wallet() -> Result<Address> {
 fn finish_setup(address: Address) -> Result<()> {
     let total = 4;
 
-    step_header(2, total, "Proxy Wallet");
+    step_header(2, total, "Trading Wallet");
 
-    let proxy = derive_proxy_wallet(address, POLYGON);
-    match proxy {
-        Some(proxy) => {
-            println!("  ✓ Proxy wallet derived");
-            println!("    Proxy: {proxy}");
+    let sig_type = config::resolve_signature_type(None);
+    let trading = derive_trading_wallet(address, POLYGON, &sig_type);
+    match trading {
+        Some(tw) => {
+            println!("  ✓ Trading wallet derived ({sig_type})");
+            println!("    Trading wallet: {tw}");
             println!("    Deposit USDC to this address to start trading.");
         }
         None => {
-            println!("  ✗ Could not derive proxy wallet");
-            println!("    You may need to use --signature-type eoa");
+            println!("  ℹ Using EOA directly (signature type: {sig_type})");
         }
     }
 
@@ -173,7 +173,7 @@ fn finish_setup(address: Address) -> Result<()> {
 
     step_header(3, total, "Fund Wallet");
 
-    let deposit_addr = proxy.unwrap_or(address);
+    let deposit_addr = trading.unwrap_or(address);
     println!("  ○ Deposit USDC to your wallet to start trading");
     println!("    Run: polymarket bridge deposit {deposit_addr}");
     println!("    Or transfer USDC directly on Polygon");

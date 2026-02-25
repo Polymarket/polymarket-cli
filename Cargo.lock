@@ -2976,6 +2976,7 @@ dependencies = [
  "dirs",
  "polymarket-client-sdk",
  "predicates",
+ "reqwest 0.13.2",
  "rust_decimal",
  "rust_decimal_macros",
  "rustyline",
