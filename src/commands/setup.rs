@@ -132,7 +132,9 @@ fn setup_wallet() -> Result<Address> {
         (address, hex)
     };
 
-    config::save_wallet(&key_hex, POLYGON, config::DEFAULT_SIGNATURE_TYPE)?;
+    let password = crate::password::prompt_new_password()?;
+    config::save_key_encrypted(&key_hex, &password)?;
+    config::save_wallet_settings(POLYGON, config::DEFAULT_SIGNATURE_TYPE)?;
 
     if has_key {
         println!("  ✓ Wallet imported");
@@ -144,7 +146,7 @@ fn setup_wallet() -> Result<Address> {
 
     if !has_key {
         println!();
-        println!("  ⚠ Back up your private key from the config file.");
+        println!("  ⚠ Remember your password. Use `polymarket wallet export` to back up your key.");
         println!("    If lost, your funds cannot be recovered.");
     }
 

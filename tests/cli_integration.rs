@@ -7,6 +7,7 @@ fn polymarket() -> Command {
     let mut cmd = Command::cargo_bin("polymarket").unwrap();
     cmd.env_remove("POLYMARKET_PRIVATE_KEY");
     cmd.env_remove("POLYMARKET_SIGNATURE_TYPE");
+    cmd.env_remove("POLYMARKET_PASSWORD");
     cmd
 }
 
@@ -79,7 +80,8 @@ fn wallet_help_lists_subcommands() {
                 .and(predicate::str::contains("import"))
                 .and(predicate::str::contains("address"))
                 .and(predicate::str::contains("show"))
-                .and(predicate::str::contains("reset")),
+                .and(predicate::str::contains("reset"))
+                .and(predicate::str::contains("export")),
         );
 }
 
