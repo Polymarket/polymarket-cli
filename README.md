@@ -406,6 +406,131 @@ polymarket shell
 
 Supports command history. All commands work the same as the CLI, just without the `polymarket` prefix.
 
+### MetEngine (Smart Money Analytics)
+
+Smart money analytics powered by [MetEngine](https://metengine.xyz). Uses the x402 payment protocol on Solana Mainnet -- no API keys, payment IS authentication. Each request is pay-per-use in USDC.
+
+**Setup:**
+
+```bash
+# Set your Solana private key (Base58 format)
+export METENGINE_SOLANA_KEY=<your-base58-private-key>
+
+# Or pass it per-command
+polymarket --solana-key <your-base58-private-key> metengine trending
+
+# Optional: use a private Solana RPC (recommended for heavy usage)
+export SOLANA_RPC_URL=https://your-rpc-endpoint.com
+```
+
+The Solana wallet must hold USDC on Mainnet to pay for requests. Resolution order: `--solana-key` flag > `METENGINE_SOLANA_KEY` env > config file.
+
+**Free endpoints (no wallet needed):**
+
+```bash
+polymarket metengine health                     # API status
+polymarket metengine pricing                    # Endpoint pricing tiers
+```
+
+**Market Discovery:**
+
+```bash
+# Trending markets by volume spike, trade count, or smart money inflow
+polymarket metengine trending --timeframe 24h --sort-by volume_spike --limit 20
+
+# Search markets
+polymarket metengine search "bitcoin" --status active --sort-by relevance
+
+# Market categories with volume/trade stats
+polymarket metengine categories --timeframe 24h
+
+# Platform-wide statistics
+polymarket metengine platform-stats --timeframe 7d
+
+# OHLCV price history (accepts condition ID, slug, or Polymarket URL)
+polymarket metengine price-history 0xCONDITION_ID --timeframe 7d --bucket-size 1h
+polymarket metengine price-history https://polymarket.com/event/foo/bar-slug --timeframe 7d
+polymarket metengine price-history bar-slug --timeframe 7d
+
+# Similar markets (overlapping traders)
+polymarket metengine similar 0xCONDITION_ID --limit 10
+
+# Smart money opportunity scanner
+polymarket metengine opportunities --min-signal-strength moderate --min-smart-wallets 3
+
+# Highest smart money conviction
+polymarket metengine high-conviction --min-smart-wallets 5 --min-avg-score 65
+
+# Capital flow across categories
+polymarket metengine capital-flow --timeframe 7d --smart-money-only
+
+# Volume heatmap
+polymarket metengine volume-heatmap --timeframe 24h --group-by category
+
+# Recently resolved markets with smart money accuracy
+polymarket metengine resolutions --sort-by smart_money_accuracy --limit 25
+
+# Dumb money positions (low-score traders)
+polymarket metengine dumb-money 0xCONDITION_ID --max-score 30
+```
+
+**Intelligence & Trades:**
+
+```bash
+# Deep smart money intelligence (accepts condition ID, slug, or URL)
+polymarket metengine intelligence 0xCONDITION_ID --top-n-wallets 10
+polymarket metengine intelligence https://polymarket.com/event/foo/bar-slug
+
+# Sentiment over time
+polymarket metengine sentiment 0xCONDITION_ID --timeframe 7d --bucket-size 4h
+
+# Participant breakdown by tier
+polymarket metengine participants 0xCONDITION_ID
+
+# Insider detection on a market
+polymarket metengine insiders 0xCONDITION_ID --min-score 20
+
+# Recent trades (filterable)
+polymarket metengine trades 0xCONDITION_ID --timeframe 24h --smart-money-only
+
+# Whale trades across all markets (--market accepts condition ID, slug, or URL)
+polymarket metengine whale-trades --min-usdc 10000 --timeframe 24h
+polymarket metengine whale-trades --market https://polymarket.com/event/foo/bar-slug
+
+# Wallets that called outcomes early
+polymarket metengine alpha-callers --days-back 30 --min-days-early 7 --min-bet-usdc 100
+
+# Platform-wide insider detection
+polymarket metengine wallet-insiders --min-score 50 --limit 50
+```
+
+**Wallet Analytics:**
+
+```bash
+# Full wallet profile (score, stats, positions)
+polymarket metengine wallet-profile 0xWALLET
+
+# Recent trading activity
+polymarket metengine wallet-activity 0xWALLET --timeframe 24h
+
+# PnL breakdown by position
+polymarket metengine wallet-pnl 0xWALLET --timeframe 90d
+
+# Compare 2-5 wallets side by side
+polymarket metengine wallet-compare "0xWALLET1,0xWALLET2"
+
+# Find copy-traders of a wallet
+polymarket metengine copy-traders 0xWALLET --max-lag-minutes 60
+
+# Top performing wallets leaderboard
+polymarket metengine top-performers --timeframe 7d --metric pnl --limit 25
+
+# Category specialists
+polymarket metengine niche-experts "crypto" --min-category-trades 10 --sort-by category_sharpe
+```
+
+All MetEngine commands support `--output table` (default) and `--output json`.
+
 ### Other
 
 ```bash
@@ -461,6 +586,24 @@ polymarket clob cancel ORDER_ID
 polymarket clob cancel-all
 ```
 
+### Research with smart money analytics
+
+```bash
+# Find trending markets with smart money activity
+polymarket metengine trending --timeframe 24h --sort-by smart_money_inflow
+
+# Deep-dive into a specific market (use condition ID, slug, or full URL)
+polymarket metengine intelligence 0xCONDITION_ID
+polymarket metengine sentiment https://polymarket.com/event/foo/bar-slug --timeframe 7d
+
+# Check who's trading it
+polymarket metengine whale-trades --market 0xCONDITION_ID --timeframe 24h
+
+# Profile a smart wallet
+polymarket metengine wallet-profile 0xWALLET
+polymarket metengine wallet-pnl 0xWALLET --timeframe 90d
+```
+
 ### Script with JSON output
 
 ```bash
@@ -483,6 +626,7 @@ src/
   main.rs        -- CLI entry point, clap parsing, error handling
   auth.rs        -- Wallet resolution, RPC provider, CLOB authentication
   config.rs      -- Config file (~/.config/polymarket/config.json)
+  metengine.rs   -- x402 HTTP client (FreeClient + PaidClient with Solana signing)
   shell.rs       -- Interactive REPL
   commands/      -- One module per command group
   output/        -- Table and JSON rendering per command group
