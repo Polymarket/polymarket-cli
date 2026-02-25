@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 
 pub const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
@@ -102,7 +103,7 @@ pub fn needs_migration() -> bool {
 }
 
 /// Encrypt a private key and save as keystore.json.
-pub fn save_key_encrypted(key_hex: &str, password: &str) -> Result<()> {
+pub fn save_key_encrypted(key_hex: &SecretString, password: &SecretString) -> Result<()> {
     use std::str::FromStr;
 
     let dir = config_dir()?;
@@ -114,13 +115,13 @@ pub fn save_key_encrypted(key_hex: &str, password: &str) -> Result<()> {
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
     }
 
-    let signer = alloy::signers::local::LocalSigner::from_str(key_hex)
+    let signer = alloy::signers::local::LocalSigner::from_str(key_hex.expose_secret())
         .map_err(|e| anyhow::anyhow!("Invalid private key: {e}"))?;
     let key_bytes = signer.credential().to_bytes();
 
     let mut rng = rand::thread_rng();
     alloy::signers::local::LocalSigner::encrypt_keystore(
-        &dir, &mut rng, key_bytes, password, Some("keystore"),
+        &dir, &mut rng, key_bytes, password.expose_secret(), Some("keystore"),
     )
     .map_err(|e| anyhow::anyhow!("Failed to encrypt keystore: {e}"))?;
 
@@ -143,7 +144,7 @@ pub fn save_key_encrypted(key_hex: &str, password: &str) -> Result<()> {
 }
 
 /// Decrypt keystore.json and return the private key as 0x-prefixed hex.
-pub fn load_key_encrypted(password: &str) -> Result<String> {
+pub fn load_key_encrypted(password: &str) -> Result<SecretString> {
     use std::fmt::Write as _;
 
     let path = keystore_path()?;
@@ -163,11 +164,11 @@ pub fn load_key_encrypted(password: &str) -> Result<String> {
     for b in &bytes {
         write!(hex, "{b:02x}").unwrap();
     }
-    Ok(hex)
+    Ok(SecretString::from(hex))
 }
 
 /// Migrate old plaintext config to encrypted keystore.
-pub fn migrate_to_encrypted(password: &str) -> Result<()> {
+pub fn migrate_to_encrypted(password: &SecretString) -> Result<()> {
     let config = load_config()
         .ok_or_else(|| anyhow::anyhow!("No config file found to migrate"))?;
 
@@ -176,7 +177,7 @@ pub fn migrate_to_encrypted(password: &str) -> Result<()> {
     }
 
     // Encrypt the key
-    save_key_encrypted(&config.private_key, password)?;
+    save_key_encrypted(&SecretString::from(config.private_key), password)?;
 
     // Rewrite config.json without private_key
     save_wallet_settings(config.chain_id, &config.signature_type)?;
@@ -218,17 +219,17 @@ pub fn save_wallet_settings(chain_id: u64, signature_type: &str) -> Result<()> {
 }
 
 /// Priority: CLI flag > env var > config file.
-pub fn resolve_key(cli_flag: Option<&str>) -> (Option<String>, KeySource) {
+pub fn resolve_key(cli_flag: Option<&str>) -> (Option<SecretString>, KeySource) {
     if let Some(key) = cli_flag {
-        return (Some(key.to_string()), KeySource::Flag);
+        return (Some(SecretString::from(key.to_string())), KeySource::Flag);
     }
     if let Ok(key) = std::env::var(ENV_VAR)
         && !key.is_empty()
     {
-        return (Some(key), KeySource::EnvVar);
+        return (Some(SecretString::from(key)), KeySource::EnvVar);
     }
     if let Some(config) = load_config() {
-        return (Some(config.private_key), KeySource::ConfigFile);
+        return (Some(SecretString::from(config.private_key)), KeySource::ConfigFile);
     }
     (None, KeySource::None)
 }
@@ -236,6 +237,7 @@ pub fn resolve_key(cli_flag: Option<&str>) -> (Option<String>, KeySource) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use secrecy::ExposeSecret;
     use std::sync::Mutex;
 
     // Mutex to serialize env var tests (set_var is not thread-safe)
@@ -254,7 +256,7 @@ mod tests {
         let _lock = ENV_LOCK.lock().unwrap();
         unsafe { set(ENV_VAR, "env_key") };
         let (key, source) = resolve_key(Some("flag_key"));
-        assert_eq!(key.unwrap(), "flag_key");
+        assert_eq!(key.unwrap().expose_secret(), "flag_key");
         assert!(matches!(source, KeySource::Flag));
         unsafe { unset(ENV_VAR) };
     }
@@ -264,7 +266,7 @@ mod tests {
         let _lock = ENV_LOCK.lock().unwrap();
         unsafe { set(ENV_VAR, "env_key_value") };
         let (key, source) = resolve_key(None);
-        assert_eq!(key.unwrap(), "env_key_value");
+        assert_eq!(key.unwrap().expose_secret(), "env_key_value");
         assert!(matches!(source, KeySource::EnvVar));
         unsafe { unset(ENV_VAR) };
     }

@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use polymarket_client_sdk::auth::{LocalSigner, Signer as _};
 use polymarket_client_sdk::types::Address;
 use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use secrecy::{ExposeSecret, SecretString};
 
 use super::wallet::normalize_key;
 use crate::config;
@@ -89,8 +90,8 @@ pub fn execute() -> Result<()> {
         let (existing_addr, source) = {
             let (key, src) = config::resolve_key(None);
             let addr = key
-                .as_deref()
-                .and_then(|k| LocalSigner::from_str(k).ok())
+                .as_ref()
+                .and_then(|k| LocalSigner::from_str(k.expose_secret()).ok())
                 .map(|s| s.address());
             (addr, src)
         };
@@ -101,7 +102,7 @@ pub fn execute() -> Result<()> {
                 config::load_key_encrypted(pw)
             })
             .ok()
-            .and_then(|k| LocalSigner::from_str(&k).ok())
+            .and_then(|k| LocalSigner::from_str(k.expose_secret()).ok())
             .map(|s| s.address());
             (addr, config::KeySource::Keystore)
         } else {
@@ -138,7 +139,7 @@ fn setup_wallet() -> Result<Address> {
         let signer = LocalSigner::from_str(&normalized)
             .context("Invalid private key")?
             .with_chain_id(Some(POLYGON));
-        (signer.address(), normalized)
+        (signer.address(), SecretString::from(normalized))
     } else {
         let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
         let address = signer.address();
@@ -148,7 +149,7 @@ fn setup_wallet() -> Result<Address> {
         for b in &bytes {
             write!(hex, "{b:02x}").unwrap();
         }
-        (address, hex)
+        (address, SecretString::from(hex))
     };
 
     let password = crate::password::prompt_new_password()?;

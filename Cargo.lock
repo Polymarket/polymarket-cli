@@ -3052,6 +3052,7 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "rustyline",
+ "secrecy",
  "serde",
  "serde_json",
  "tabled",

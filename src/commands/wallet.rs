@@ -6,6 +6,7 @@ use clap::{Args, Subcommand};
 use polymarket_client_sdk::auth::LocalSigner;
 use polymarket_client_sdk::auth::Signer as _;
 use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use secrecy::{ExposeSecret, SecretString};
 
 use crate::config;
 use crate::output::OutputFormat;
@@ -97,11 +98,12 @@ fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Resul
     let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
     let address = signer.address();
     let bytes = signer.credential().to_bytes();
-    let mut key_hex = String::with_capacity(2 + bytes.len() * 2);
-    key_hex.push_str("0x");
+    let mut hex = String::with_capacity(2 + bytes.len() * 2);
+    hex.push_str("0x");
     for b in &bytes {
-        write!(key_hex, "{b:02x}").unwrap();
+        write!(hex, "{b:02x}").unwrap();
     }
+    let key_hex = SecretString::from(hex);
 
     let password = crate::password::prompt_new_password()?;
     config::save_key_encrypted(&key_hex, &password)?;
@@ -145,6 +147,7 @@ fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &st
         .context("Invalid private key")?
         .with_chain_id(Some(POLYGON));
     let address = signer.address();
+    let normalized = SecretString::from(normalized);
 
     let password = crate::password::prompt_new_password()?;
     config::save_key_encrypted(&normalized, &password)?;
@@ -180,7 +183,7 @@ fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &st
 fn cmd_address(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
     let key = crate::auth::resolve_key_string(private_key_flag)?;
 
-    let signer = LocalSigner::from_str(&key).context("Invalid private key")?;
+    let signer = LocalSigner::from_str(key.expose_secret()).context("Invalid private key")?;
     let address = signer.address();
 
     match output {
@@ -197,7 +200,7 @@ fn cmd_address(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<
 fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
     let (key_result, source) = {
         let (old_key, old_source) = config::resolve_key(private_key_flag);
-        if old_key.as_ref().is_some_and(|k| !k.is_empty()) {
+        if old_key.as_ref().is_some_and(|k| !k.expose_secret().is_empty()) {
             (Ok(old_key.unwrap()), old_source)
         } else if config::keystore_exists() {
             let result = crate::password::prompt_password_with_retries(|pw| {
@@ -209,7 +212,7 @@ fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()>
         }
     };
 
-    let signer = key_result.ok().and_then(|k| LocalSigner::from_str(&k).ok());
+    let signer = key_result.ok().and_then(|k| LocalSigner::from_str(k.expose_secret()).ok());
     let address = signer.as_ref().map(|s| s.address().to_string());
     let proxy_addr = signer
         .as_ref()
@@ -260,10 +263,10 @@ fn cmd_export(output: &OutputFormat) -> Result<()> {
 
     match output {
         OutputFormat::Json => {
-            println!("{}", serde_json::json!({"private_key": key}));
+            println!("{}", serde_json::json!({"private_key": key.expose_secret()}));
         }
         OutputFormat::Table => {
-            println!("{key}");
+            println!("{}", key.expose_secret());
         }
     }
     Ok(())

@@ -28,6 +28,7 @@ dirs = "6"
 rustyline = "15"
 rpassword = "7"
 rand = "0.8"
+secrecy = "0.10"
 
 [dev-dependencies]
 assert_cmd = "2"
