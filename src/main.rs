@@ -72,14 +72,7 @@ async fn main() -> ExitCode {
     let output = cli.output;
 
     if let Err(e) = run(cli).await {
-        match output {
-            OutputFormat::Json => {
-                println!("{}", serde_json::json!({"error": e.to_string()}));
-            }
-            OutputFormat::Table => {
-                eprintln!("Error: {e}");
-            }
-        }
+        output::print_error(&e, output);
         return ExitCode::FAILURE;
     }
 
@@ -88,68 +81,21 @@ async fn main() -> ExitCode {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
+    // Lazy-init so we only pay for the client we actually use.
+    let gamma = std::cell::LazyCell::new(polymarket_client_sdk::gamma::Client::default);
+    let data = std::cell::LazyCell::new(polymarket_client_sdk::data::Client::default);
+    let bridge = std::cell::LazyCell::new(polymarket_client_sdk::bridge::Client::default);
+
     match cli.command {
         Commands::Setup => commands::setup::execute(),
-        Commands::Shell => {
-            Box::pin(shell::run_shell()).await;
-            Ok(())
-        }
-        Commands::Markets(args) => {
-            commands::markets::execute(
-                &polymarket_client_sdk::gamma::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
-        Commands::Events(args) => {
-            commands::events::execute(
-                &polymarket_client_sdk::gamma::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
-        Commands::Tags(args) => {
-            commands::tags::execute(
-                &polymarket_client_sdk::gamma::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
-        Commands::Series(args) => {
-            commands::series::execute(
-                &polymarket_client_sdk::gamma::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
-        Commands::Comments(args) => {
-            commands::comments::execute(
-                &polymarket_client_sdk::gamma::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
-        Commands::Profiles(args) => {
-            commands::profiles::execute(
-                &polymarket_client_sdk::gamma::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
-        Commands::Sports(args) => {
-            commands::sports::execute(
-                &polymarket_client_sdk::gamma::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
+        Commands::Shell => Box::pin(shell::run_shell()).await,
+        Commands::Markets(args) => commands::markets::execute(&gamma, args, cli.output).await,
+        Commands::Events(args) => commands::events::execute(&gamma, args, cli.output).await,
+        Commands::Tags(args) => commands::tags::execute(&gamma, args, cli.output).await,
+        Commands::Series(args) => commands::series::execute(&gamma, args, cli.output).await,
+        Commands::Comments(args) => commands::comments::execute(&gamma, args, cli.output).await,
+        Commands::Profiles(args) => commands::profiles::execute(&gamma, args, cli.output).await,
+        Commands::Sports(args) => commands::sports::execute(&gamma, args, cli.output).await,
         Commands::Approve(args) => {
             commands::approve::execute(args, cli.output, cli.private_key.as_deref()).await
         }
@@ -165,30 +111,14 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Ctf(args) => {
             commands::ctf::execute(args, cli.output, cli.private_key.as_deref()).await
         }
-        Commands::Data(args) => {
-            commands::data::execute(
-                &polymarket_client_sdk::data::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
-        Commands::Bridge(args) => {
-            commands::bridge::execute(
-                &polymarket_client_sdk::bridge::Client::default(),
-                args,
-                cli.output,
-            )
-            .await
-        }
+        Commands::Data(args) => commands::data::execute(&data, args, cli.output).await,
+        Commands::Bridge(args) => commands::bridge::execute(&bridge, args, cli.output).await,
         Commands::Wallet(args) => {
             commands::wallet::execute(args, &cli.output, cli.private_key.as_deref())
         }
         Commands::Upgrade => commands::upgrade::execute(),
         Commands::Status => {
-            let status = polymarket_client_sdk::gamma::Client::default()
-                .status()
-                .await?;
+            let status = gamma.status().await?;
             match cli.output {
                 OutputFormat::Json => {
                     println!("{}", serde_json::json!({"status": status}));

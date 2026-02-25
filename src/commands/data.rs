@@ -1,4 +1,3 @@
-use super::{parse_address, parse_condition_id};
 use crate::output::OutputFormat;
 use crate::output::data::{
     print_activity, print_builder_leaderboard, print_builder_volume, print_closed_positions,
@@ -15,6 +14,7 @@ use polymarket_client_sdk::data::{
         TraderLeaderboardRequest, TradesRequest, ValueRequest,
     },
 };
+use polymarket_client_sdk::types::{Address, B256};
 
 #[derive(Args)]
 pub struct DataArgs {
@@ -27,7 +27,7 @@ pub enum DataCommand {
     /// Get open positions for a wallet address
     Positions {
         /// Wallet address (0x...)
-        address: String,
+        address: Address,
 
         /// Max results
         #[arg(long, default_value = "25")]
@@ -41,7 +41,7 @@ pub enum DataCommand {
     /// Get closed positions for a wallet address
     ClosedPositions {
         /// Wallet address (0x...)
-        address: String,
+        address: Address,
 
         /// Max results
         #[arg(long, default_value = "25")]
@@ -55,19 +55,19 @@ pub enum DataCommand {
     /// Get total position value for a wallet address
     Value {
         /// Wallet address (0x...)
-        address: String,
+        address: Address,
     },
 
     /// Get count of unique markets traded by a wallet
     Traded {
         /// Wallet address (0x...)
-        address: String,
+        address: Address,
     },
 
     /// Get trade history
     Trades {
         /// Wallet address (0x...)
-        address: String,
+        address: Address,
 
         /// Max results
         #[arg(long, default_value = "25")]
@@ -81,7 +81,7 @@ pub enum DataCommand {
     /// Get on-chain activity for a wallet address
     Activity {
         /// Wallet address (0x...)
-        address: String,
+        address: Address,
 
         /// Max results
         #[arg(long, default_value = "25")]
@@ -95,7 +95,7 @@ pub enum DataCommand {
     /// Get top token holders for a market
     Holders {
         /// Market condition ID (0x...)
-        market: String,
+        market: B256,
 
         /// Max results per token
         #[arg(long, default_value = "10")]
@@ -105,7 +105,7 @@ pub enum DataCommand {
     /// Get open interest for markets
     OpenInterest {
         /// Market condition ID (0x...)
-        market: String,
+        market: B256,
     },
 
     /// Get live volume for an event
@@ -164,16 +164,7 @@ pub enum TimePeriod {
     All,
 }
 
-impl From<TimePeriod> for polymarket_client_sdk::data::types::TimePeriod {
-    fn from(t: TimePeriod) -> Self {
-        match t {
-            TimePeriod::Day => Self::Day,
-            TimePeriod::Week => Self::Week,
-            TimePeriod::Month => Self::Month,
-            TimePeriod::All => Self::All,
-        }
-    }
-}
+super::enum_from!(TimePeriod => polymarket_client_sdk::data::types::TimePeriod { Day, Week, Month, All });
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum OrderBy {
@@ -181,14 +172,7 @@ pub enum OrderBy {
     Vol,
 }
 
-impl From<OrderBy> for polymarket_client_sdk::data::types::LeaderboardOrderBy {
-    fn from(o: OrderBy) -> Self {
-        match o {
-            OrderBy::Pnl => Self::Pnl,
-            OrderBy::Vol => Self::Vol,
-        }
-    }
-}
+super::enum_from!(OrderBy => polymarket_client_sdk::data::types::LeaderboardOrderBy { Pnl, Vol });
 
 pub async fn execute(client: &data::Client, args: DataArgs, output: OutputFormat) -> Result<()> {
     match args.command {
@@ -226,7 +210,7 @@ async fn execute_user(
             offset,
         } => {
             let request = PositionsRequest::builder()
-                .user(parse_address(&address)?)
+                .user(address)
                 .limit(limit)?
                 .maybe_offset(offset)?
                 .build();
@@ -241,7 +225,7 @@ async fn execute_user(
             offset,
         } => {
             let request = ClosedPositionsRequest::builder()
-                .user(parse_address(&address)?)
+                .user(address)
                 .limit(limit)?
                 .maybe_offset(offset)?
                 .build();
@@ -251,18 +235,14 @@ async fn execute_user(
         }
 
         DataCommand::Value { address } => {
-            let request = ValueRequest::builder()
-                .user(parse_address(&address)?)
-                .build();
+            let request = ValueRequest::builder().user(address).build();
 
             let values = client.value(&request).await?;
             print_value(&values, output)?;
         }
 
         DataCommand::Traded { address } => {
-            let request = TradedRequest::builder()
-                .user(parse_address(&address)?)
-                .build();
+            let request = TradedRequest::builder().user(address).build();
 
             let traded = client.traded(&request).await?;
             print_traded(&traded, output)?;
@@ -274,7 +254,7 @@ async fn execute_user(
             offset,
         } => {
             let request = TradesRequest::builder()
-                .user(parse_address(&address)?)
+                .user(address)
                 .limit(limit)?
                 .maybe_offset(offset)?
                 .build();
@@ -289,7 +269,7 @@ async fn execute_user(
             offset,
         } => {
             let request = ActivityRequest::builder()
-                .user(parse_address(&address)?)
+                .user(address)
                 .limit(limit)?
                 .maybe_offset(offset)?
                 .build();
@@ -298,7 +278,14 @@ async fn execute_user(
             print_activity(&activity, output)?;
         }
 
-        _ => unreachable!(),
+        DataCommand::Holders { .. }
+        | DataCommand::OpenInterest { .. }
+        | DataCommand::Volume { .. }
+        | DataCommand::Leaderboard { .. }
+        | DataCommand::BuilderLeaderboard { .. }
+        | DataCommand::BuilderVolume { .. } => {
+            unreachable!("execute() routes market/leaderboard commands to other handlers")
+        }
     }
 
     Ok(())
@@ -311,9 +298,8 @@ async fn execute_market(
 ) -> Result<()> {
     match command {
         DataCommand::Holders { market, limit } => {
-            let cid = parse_condition_id(&market)?;
             let request = HoldersRequest::builder()
-                .markets(vec![cid])
+                .markets(vec![market])
                 .limit(limit)?
                 .build();
 
@@ -322,8 +308,7 @@ async fn execute_market(
         }
 
         DataCommand::OpenInterest { market } => {
-            let cid = parse_condition_id(&market)?;
-            let request = OpenInterestRequest::builder().markets(vec![cid]).build();
+            let request = OpenInterestRequest::builder().markets(vec![market]).build();
 
             let oi = client.open_interest(&request).await?;
             print_open_interest(&oi, output)?;
@@ -335,7 +320,17 @@ async fn execute_market(
             print_live_volume(&volume, output)?;
         }
 
-        _ => unreachable!(),
+        DataCommand::Positions { .. }
+        | DataCommand::ClosedPositions { .. }
+        | DataCommand::Value { .. }
+        | DataCommand::Traded { .. }
+        | DataCommand::Trades { .. }
+        | DataCommand::Activity { .. }
+        | DataCommand::Leaderboard { .. }
+        | DataCommand::BuilderLeaderboard { .. }
+        | DataCommand::BuilderVolume { .. } => {
+            unreachable!("execute() routes user/leaderboard commands to other handlers")
+        }
     }
 
     Ok(())
@@ -388,7 +383,17 @@ async fn execute_leaderboard(
             print_builder_volume(&entries, output)?;
         }
 
-        _ => unreachable!(),
+        DataCommand::Positions { .. }
+        | DataCommand::ClosedPositions { .. }
+        | DataCommand::Value { .. }
+        | DataCommand::Traded { .. }
+        | DataCommand::Trades { .. }
+        | DataCommand::Activity { .. }
+        | DataCommand::Holders { .. }
+        | DataCommand::OpenInterest { .. }
+        | DataCommand::Volume { .. } => {
+            unreachable!("execute() routes user/market commands to other handlers")
+        }
     }
 
     Ok(())

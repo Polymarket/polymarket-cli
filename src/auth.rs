@@ -9,7 +9,11 @@ use polymarket_client_sdk::{POLYGON, clob};
 
 use crate::config;
 
-pub const RPC_URL: &str = "https://polygon.drpc.org";
+const DEFAULT_RPC_URL: &str = "https://polygon.drpc.org";
+
+fn rpc_url() -> String {
+    std::env::var("POLYMARKET_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
+}
 
 fn parse_signature_type(s: &str) -> SignatureType {
     match s {
@@ -53,7 +57,7 @@ pub async fn authenticate_with_signer(
 
 pub async fn create_readonly_provider() -> Result<impl alloy::providers::Provider + Clone> {
     ProviderBuilder::new()
-        .connect(RPC_URL)
+        .connect(&rpc_url())
         .await
         .context("Failed to connect to Polygon RPC")
 }
@@ -68,7 +72,7 @@ pub async fn create_provider(
         .with_chain_id(Some(POLYGON));
     ProviderBuilder::new()
         .wallet(signer)
-        .connect(RPC_URL)
+        .connect(&rpc_url())
         .await
         .context("Failed to connect to Polygon RPC with wallet")
 }

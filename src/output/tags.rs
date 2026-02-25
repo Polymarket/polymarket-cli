@@ -2,7 +2,7 @@ use polymarket_client_sdk::gamma::types::response::{RelatedTag, Tag};
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{detail_field, print_detail_table, truncate};
+use super::{NONE, detail_field, format_date, print_detail_table, truncate};
 
 #[derive(Tabled)]
 struct TagRow {
@@ -19,9 +19,9 @@ struct TagRow {
 fn tag_to_row(t: &Tag) -> TagRow {
     TagRow {
         id: truncate(&t.id, 20),
-        label: t.label.as_deref().unwrap_or("—").into(),
-        slug: t.slug.as_deref().unwrap_or("—").into(),
-        carousel: t.is_carousel.map_or_else(|| "—".into(), |v| v.to_string()),
+        label: t.label.as_deref().unwrap_or(NONE).into(),
+        slug: t.slug.as_deref().unwrap_or(NONE).into(),
+        carousel: t.is_carousel.map_or_else(|| NONE.into(), |v| v.to_string()),
     }
 }
 
@@ -50,9 +50,9 @@ struct RelatedTagRow {
 fn related_tag_to_row(r: &RelatedTag) -> RelatedTagRow {
     RelatedTagRow {
         id: truncate(&r.id, 20),
-        tag_id: r.tag_id.as_deref().unwrap_or("—").into(),
-        related_tag_id: r.related_tag_id.as_deref().unwrap_or("—").into(),
-        rank: r.rank.map_or_else(|| "—".into(), |v| v.to_string()),
+        tag_id: r.tag_id.as_deref().unwrap_or(NONE).into(),
+        related_tag_id: r.related_tag_id.as_deref().unwrap_or(NONE).into(),
+        rank: r.rank.map_or_else(|| NONE.into(), |v| v.to_string()),
     }
 }
 
@@ -91,12 +91,12 @@ pub fn print_tag_detail(t: &Tag) {
     detail_field!(
         rows,
         "Created At",
-        t.created_at.map(|d| d.to_string()).unwrap_or_default()
+        t.created_at.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
         "Updated At",
-        t.updated_at.map(|d| d.to_string()).unwrap_or_default()
+        t.updated_at.as_ref().map(format_date).unwrap_or_default()
     );
 
     print_detail_table(rows);

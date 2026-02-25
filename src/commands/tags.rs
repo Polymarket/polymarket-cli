@@ -8,7 +8,7 @@ use polymarket_client_sdk::gamma::{
     },
 };
 
-use super::is_numeric_id;
+use super::{ascending_flag, is_numeric_id};
 use crate::output::tags::{print_related_tags_table, print_tag_detail, print_tags_table};
 use crate::output::{OutputFormat, print_json};
 
@@ -72,7 +72,7 @@ pub async fn execute(client: &gamma::Client, args: TagsArgs, output: OutputForma
             let request = TagsRequest::builder()
                 .limit(limit)
                 .maybe_offset(offset)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(ascending_flag(ascending))
                 .build();
 
             let tags = client.tags(&request).await?;

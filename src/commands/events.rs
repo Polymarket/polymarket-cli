@@ -5,7 +5,7 @@ use polymarket_client_sdk::gamma::{
     types::request::{EventByIdRequest, EventBySlugRequest, EventTagsRequest, EventsRequest},
 };
 
-use super::is_numeric_id;
+use super::{ascending_flag, is_numeric_id};
 use crate::output::events::{print_event_detail, print_events_table};
 use crate::output::tags::print_tags_table;
 use crate::output::{OutputFormat, print_json};
@@ -79,9 +79,9 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
                 .limit(limit)
                 .maybe_closed(resolved_closed)
                 .maybe_offset(offset)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(ascending_flag(ascending))
                 .maybe_tag_slug(tag)
-                .order(order.into_iter().collect::<Vec<_>>())
+                .order(order.into_iter().collect())
                 .build();
 
             let events = client.events(&request).await?;

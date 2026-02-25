@@ -1,6 +1,7 @@
 use std::fmt::Write as _;
 use std::str::FromStr;
 
+use alloy::signers::local::PrivateKeySigner;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::auth::LocalSigner;
@@ -81,12 +82,15 @@ fn guard_overwrite(force: bool) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn normalize_key(key: &str) -> String {
-    if key.starts_with("0x") || key.starts_with("0X") {
-        key.to_string()
-    } else {
-        format!("0x{key}")
+/// Extract the canonical 0x-prefixed hex private key from a signer.
+pub(crate) fn signer_key_hex(signer: &PrivateKeySigner) -> String {
+    let bytes = signer.credential().to_bytes();
+    let mut hex = String::with_capacity(2 + bytes.len() * 2);
+    hex.push_str("0x");
+    for b in &bytes {
+        write!(hex, "{b:02x}").unwrap();
     }
+    hex
 }
 
 fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Result<()> {
@@ -94,12 +98,7 @@ fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Resul
 
     let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
     let address = signer.address();
-    let bytes = signer.credential().to_bytes();
-    let mut key_hex = String::with_capacity(2 + bytes.len() * 2);
-    key_hex.push_str("0x");
-    for b in &bytes {
-        write!(key_hex, "{b:02x}").unwrap();
-    }
+    let key_hex = signer_key_hex(&signer);
 
     config::save_wallet(&key_hex, POLYGON, signature_type)?;
     let config_path = config::config_path()?;
@@ -136,13 +135,13 @@ fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Resul
 fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &str) -> Result<()> {
     guard_overwrite(force)?;
 
-    let normalized = normalize_key(key);
-    let signer = LocalSigner::from_str(&normalized)
+    let signer = LocalSigner::from_str(key)
         .context("Invalid private key")?
         .with_chain_id(Some(POLYGON));
     let address = signer.address();
+    let key_hex = signer_key_hex(&signer);
 
-    config::save_wallet(&normalized, POLYGON, signature_type)?;
+    config::save_wallet(&key_hex, POLYGON, signature_type)?;
     let config_path = config::config_path()?;
     let proxy_addr = derive_proxy_wallet(address, POLYGON);
 
@@ -276,29 +275,4 @@ fn cmd_reset(output: &OutputFormat, force: bool) -> Result<()> {
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_key_adds_prefix() {
-        assert_eq!(
-            normalize_key("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
-            "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-        );
-    }
-
-    #[test]
-    fn normalize_key_with_prefix_unchanged() {
-        let key = "0xabcdef";
-        assert_eq!(normalize_key(key), key);
-    }
-
-    #[test]
-    fn normalize_key_uppercase_prefix() {
-        let key = "0Xabcdef";
-        assert_eq!(normalize_key(key), key);
-    }
 }

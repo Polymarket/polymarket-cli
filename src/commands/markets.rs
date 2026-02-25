@@ -11,7 +11,7 @@ use polymarket_client_sdk::gamma::{
     },
 };
 
-use super::is_numeric_id;
+use super::{ascending_flag, is_numeric_id};
 use crate::output::markets::{print_market_detail, print_markets_table};
 use crate::output::tags::print_tags_table;
 use crate::output::{OutputFormat, print_json};
@@ -95,7 +95,7 @@ pub async fn execute(
                 .maybe_closed(resolved_closed)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(ascending_flag(ascending))
                 .build();
 
             let markets = client.markets(&request).await?;

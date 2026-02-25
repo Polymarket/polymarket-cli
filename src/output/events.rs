@@ -2,7 +2,9 @@ use polymarket_client_sdk::gamma::types::response::Event;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{detail_field, format_decimal, print_detail_table, truncate};
+use super::{
+    NONE, active_status, detail_field, format_date, format_decimal, print_detail_table, truncate,
+};
 
 #[derive(Tabled)]
 struct EventRow {
@@ -18,29 +20,19 @@ struct EventRow {
     status: String,
 }
 
-fn event_status(e: &Event) -> &'static str {
-    if e.closed == Some(true) {
-        "Closed"
-    } else if e.active == Some(true) {
-        "Active"
-    } else {
-        "Inactive"
-    }
-}
-
 fn event_to_row(e: &Event) -> EventRow {
-    let title = e.title.as_deref().unwrap_or("—");
+    let title = e.title.as_deref().unwrap_or(NONE);
     let market_count = e
         .markets
         .as_ref()
-        .map_or_else(|| "—".into(), |m| m.len().to_string());
+        .map_or_else(|| NONE.into(), |m| m.len().to_string());
 
     EventRow {
         title: truncate(title, 60),
         market_count,
-        volume: e.volume.map_or_else(|| "—".into(), format_decimal),
-        liquidity: e.liquidity.map_or_else(|| "—".into(), format_decimal),
-        status: event_status(e).into(),
+        volume: e.volume.map_or_else(|| NONE.into(), format_decimal),
+        liquidity: e.liquidity.map_or_else(|| NONE.into(), format_decimal),
+        status: active_status(e.closed, e.active).into(),
     }
 }
 
@@ -114,7 +106,7 @@ pub fn print_event_detail(e: &Event) {
         "Volume (1mo)",
         e.volume_1mo.map(format_decimal).unwrap_or_default()
     );
-    detail_field!(rows, "Status", event_status(e).into());
+    detail_field!(rows, "Status", active_status(e.closed, e.active).into());
     detail_field!(
         rows,
         "Neg Risk",
@@ -135,17 +127,17 @@ pub fn print_event_detail(e: &Event) {
     detail_field!(
         rows,
         "Start Date",
-        e.start_date.map(|d| d.to_string()).unwrap_or_default()
+        e.start_date.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
         "End Date",
-        e.end_date.map(|d| d.to_string()).unwrap_or_default()
+        e.end_date.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
         "Created At",
-        e.created_at.map(|d| d.to_string()).unwrap_or_default()
+        e.created_at.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
@@ -181,25 +173,25 @@ mod tests {
     #[test]
     fn status_closed_overrides_active() {
         let e = make_event(json!({"id": "1", "closed": true, "active": true}));
-        assert_eq!(event_status(&e), "Closed");
+        assert_eq!(active_status(e.closed, e.active), "Closed");
     }
 
     #[test]
     fn status_active_when_not_closed() {
         let e = make_event(json!({"id": "1", "closed": false, "active": true}));
-        assert_eq!(event_status(&e), "Active");
+        assert_eq!(active_status(e.closed, e.active), "Active");
     }
 
     #[test]
     fn status_inactive_when_fields_missing() {
         let e = make_event(json!({"id": "1"}));
-        assert_eq!(event_status(&e), "Inactive");
+        assert_eq!(active_status(e.closed, e.active), "Inactive");
     }
 
     #[test]
     fn status_inactive_when_both_false() {
         let e = make_event(json!({"id": "1", "closed": false, "active": false}));
-        assert_eq!(event_status(&e), "Inactive");
+        assert_eq!(active_status(e.closed, e.active), "Inactive");
     }
 
     #[test]

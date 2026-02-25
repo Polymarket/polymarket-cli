@@ -1,4 +1,3 @@
-use super::parse_address;
 use crate::output::comments::{print_comment_detail, print_comments_table};
 use crate::output::{OutputFormat, print_json};
 use anyhow::Result;
@@ -55,7 +54,7 @@ pub enum CommentsCommand {
     /// List comments by a user's wallet address
     ByUser {
         /// Wallet address (0x...)
-        address: String,
+        address: polymarket_client_sdk::types::Address,
 
         /// Max results
         #[arg(long, default_value = "25")]
@@ -82,15 +81,9 @@ pub enum EntityType {
     Series,
 }
 
-impl From<EntityType> for ParentEntityType {
-    fn from(e: EntityType) -> Self {
-        match e {
-            EntityType::Event => ParentEntityType::Event,
-            EntityType::Market => ParentEntityType::Market,
-            EntityType::Series => ParentEntityType::Series,
-        }
-    }
-}
+use super::ascending_flag;
+
+super::enum_from!(EntityType => ParentEntityType { Event, Market, Series });
 
 pub async fn execute(
     client: &gamma::Client,
@@ -112,7 +105,7 @@ pub async fn execute(
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(ascending_flag(ascending))
                 .build();
 
             let comments = client.comments(&request).await?;
@@ -144,13 +137,12 @@ pub async fn execute(
             order,
             ascending,
         } => {
-            let addr = parse_address(&address)?;
             let request = CommentsByUserAddressRequest::builder()
-                .user_address(addr)
+                .user_address(address)
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(ascending_flag(ascending))
                 .build();
 
             let comments = client.comments_by_user_address(&request).await?;

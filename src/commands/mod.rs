@@ -1,4 +1,5 @@
-use polymarket_client_sdk::types::{Address, B256};
+/// Polygon USDC contract address (shared across ctf and approve commands).
+pub const USDC_ADDRESS_STR: &str = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
 
 pub mod approve;
 pub mod bridge;
@@ -16,18 +17,25 @@ pub mod tags;
 pub mod upgrade;
 pub mod wallet;
 
+/// Implement `From<CliEnum>` for an SDK enum when variant names match 1:1.
+macro_rules! enum_from {
+    ($from:ty => $to:ty { $($variant:ident),+ $(,)? }) => {
+        impl From<$from> for $to {
+            fn from(v: $from) -> Self {
+                match v { $( <$from>::$variant => <$to>::$variant, )+ }
+            }
+        }
+    };
+}
+
+pub(crate) use enum_from;
+
+pub fn ascending_flag(ascending: bool) -> Option<bool> {
+    ascending.then_some(true)
+}
+
 pub fn is_numeric_id(id: &str) -> bool {
-    !id.is_empty() && id.chars().all(|c| c.is_ascii_digit())
-}
-
-pub fn parse_address(s: &str) -> anyhow::Result<Address> {
-    s.parse()
-        .map_err(|_| anyhow::anyhow!("Invalid address: must be a 0x-prefixed hex address"))
-}
-
-pub fn parse_condition_id(s: &str) -> anyhow::Result<B256> {
-    s.parse()
-        .map_err(|_| anyhow::anyhow!("Invalid condition ID: must be a 0x-prefixed 32-byte hex"))
+    id.parse::<u64>().is_ok()
 }
 
 #[cfg(test)]
@@ -50,41 +58,5 @@ mod tests {
     #[test]
     fn is_numeric_id_rejects_empty() {
         assert!(!is_numeric_id(""));
-    }
-
-    #[test]
-    fn parse_address_valid_hex() {
-        let addr = "0x0000000000000000000000000000000000000001";
-        assert!(parse_address(addr).is_ok());
-    }
-
-    #[test]
-    fn parse_address_rejects_short_hex() {
-        let err = parse_address("0x1234").unwrap_err().to_string();
-        assert!(err.contains("0x-prefixed"), "got: {err}");
-    }
-
-    #[test]
-    fn parse_address_rejects_garbage() {
-        let err = parse_address("not-an-address").unwrap_err().to_string();
-        assert!(err.contains("0x-prefixed"), "got: {err}");
-    }
-
-    #[test]
-    fn parse_condition_id_valid_64_hex() {
-        let id = "0x0000000000000000000000000000000000000000000000000000000000000001";
-        assert!(parse_condition_id(id).is_ok());
-    }
-
-    #[test]
-    fn parse_condition_id_rejects_wrong_length() {
-        let err = parse_condition_id("0x0001").unwrap_err().to_string();
-        assert!(err.contains("32-byte"), "got: {err}");
-    }
-
-    #[test]
-    fn parse_condition_id_rejects_garbage() {
-        let err = parse_condition_id("garbage").unwrap_err().to_string();
-        assert!(err.contains("32-byte"), "got: {err}");
     }
 }
