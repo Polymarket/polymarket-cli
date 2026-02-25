@@ -2,11 +2,11 @@
 
 # Polymarket CLI
 
-Rust CLI for Polymarket. Browse markets, place orders, manage positions, and interact with onchain contracts — from a terminal or as a JSON API for scripts and agents.
+Polymarket 的 Rust 命令行工具。浏览市场、下单、管理持仓、与链上合约交互 —— 既可以在终端中使用，也可以作为脚本和代理的 JSON API。
 
-> **Warning:** This is early, experimental software. Use at your own risk and do not use with large amounts of funds. APIs, commands, and behavior may change without notice. Always verify transactions before confirming.
+> **警告：** 这是一个早期实验性软件。请自行承担风险，不要用于大额资金。API、命令和行为可能会随时更改。在确认前请务必验证交易。
 
-## Install
+## 安装
 
 ### Homebrew (macOS / Linux)
 
@@ -15,13 +15,13 @@ brew tap Polymarket/polymarket-cli https://github.com/Polymarket/polymarket-cli
 brew install polymarket
 ```
 
-### Shell script
+### Shell 脚本
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/Polymarket/polymarket-cli/main/install.sh | sh
 ```
 
-### Build from source
+### 从源码构建
 
 ```bash
 git clone https://github.com/Polymarket/polymarket-cli
@@ -29,52 +29,52 @@ cd polymarket-cli
 cargo install --path .
 ```
 
-## Quick Start
+## 快速开始
 
 ```bash
-# No wallet needed — browse markets immediately
+# 无需钱包 —— 立即浏览市场
 polymarket markets list --limit 5
 polymarket markets search "election"
 polymarket events list --tag politics
 
-# Check a specific market
+# 查看特定市场
 polymarket markets get will-trump-win-the-2024-election
 
-# JSON output for scripts
+# 用于脚本的 JSON 输出
 polymarket -o json markets list --limit 3
 ```
 
-To trade, set up a wallet:
+要进行交易，请设置钱包：
 
 ```bash
 polymarket setup
-# Or manually:
+# 或手动设置：
 polymarket wallet create
 polymarket approve set
 ```
 
-## Configuration
+## 配置
 
-### Wallet Setup
+### 钱包设置
 
-The CLI needs a private key to sign orders and on-chain transactions. Three ways to provide it (checked in this order):
+CLI 需要私钥来签署订单和链上交易。提供私钥的三种方式（按检查顺序）：
 
-1. **CLI flag**: `--private-key 0xabc...`
-2. **Environment variable**: `POLYMARKET_PRIVATE_KEY=0xabc...`
-3. **Config file**: `~/.config/polymarket/config.json`
+1. **CLI 参数**: `--private-key 0xabc...`
+2. **环境变量**: `POLYMARKET_PRIVATE_KEY=0xabc...`
+3. **配置文件**: `~/.config/polymarket/config.json`
 
 ```bash
-# Create a new wallet (generates random key, saves to config)
+# 创建新钱包（生成随机密钥，保存到配置文件）
 polymarket wallet create
 
-# Import an existing key
+# 导入现有密钥
 polymarket wallet import 0xabc123...
 
-# Check what's configured
+# 查看当前配置
 polymarket wallet show
 ```
 
-The config file (`~/.config/polymarket/config.json`):
+配置文件 (`~/.config/polymarket/config.json`)：
 
 ```json
 {
@@ -84,29 +84,29 @@ The config file (`~/.config/polymarket/config.json`):
 }
 ```
 
-### Signature Types
+### 签名类型
 
-- `proxy` (default) — uses Polymarket's proxy wallet system
-- `eoa` — signs directly with your key
-- `gnosis-safe` — for multisig wallets
+- `proxy`（默认）—— 使用 Polymarket 的代理钱包系统
+- `eoa` —— 直接使用您的密钥签名
+- `gnosis-safe` —— 用于多签钱包
 
-Override per-command with `--signature-type eoa` or via `POLYMARKET_SIGNATURE_TYPE`.
+可通过 `--signature-type eoa` 或 `POLYMARKET_SIGNATURE_TYPE` 环境变量覆盖。
 
-### What Needs a Wallet
+### 哪些操作需要钱包
 
-Most commands work without a wallet — browsing markets, viewing order books, checking prices. You only need a wallet for:
+大多数命令无需钱包即可使用 —— 浏览市场、查看订单簿、查询价格。只有以下操作需要钱包：
 
-- Placing and canceling orders (`clob create-order`, `clob market-order`, `clob cancel-*`)
-- Checking your balances and trades (`clob balance`, `clob trades`, `clob orders`)
-- On-chain operations (`approve set`, `ctf split/merge/redeem`)
-- Reward and API key management (`clob rewards`, `clob create-api-key`)
+- 下单和取消订单 (`clob create-order`, `clob market-order`, `clob cancel-*`)
+- 查询余额和交易记录 (`clob balance`, `clob trades`, `clob orders`)
+- 链上操作 (`approve set`, `ctf split/merge/redeem`)
+- 奖励和 API 密钥管理 (`clob rewards`, `clob create-api-key`)
 
-## Output Formats
+## 输出格式
 
-Every command supports `--output table` (default) and `--output json`.
+每个命令都支持 `--output table`（默认）和 `--output json`。
 
 ```bash
-# Human-readable table (default)
+# 人类可读的表格格式（默认）
 polymarket markets list --limit 2
 ```
 
@@ -117,7 +117,7 @@ polymarket markets list --limit 2
 ```
 
 ```bash
-# Machine-readable JSON
+# 机器可读的 JSON 格式
 polymarket -o json markets list --limit 2
 ```
 
@@ -128,36 +128,36 @@ polymarket -o json markets list --limit 2
 ]
 ```
 
-Short form: `-o json` or `-o table`.
+简写形式：`-o json` 或 `-o table`。
 
-Errors follow the same pattern — table mode prints `Error: ...` to stderr, JSON mode prints `{"error": "..."}` to stdout. Non-zero exit code either way.
+错误输出遵循相同模式 —— 表格模式下向 stderr 打印 `Error: ...`，JSON 模式下向 stdout 打印 `{"error": "..."}`。两种情况都返回非零退出码。
 
-## Commands
+## 命令
 
-### Markets
+### 市场
 
 ```bash
-# List markets with filters
+# 列出市场（带过滤）
 polymarket markets list --limit 10
 polymarket markets list --active true --order volume_num
 polymarket markets list --closed false --limit 50 --offset 25
 
-# Get a single market by ID or slug
+# 通过 ID 或 slug 获取单个市场
 polymarket markets get 12345
 polymarket markets get will-trump-win
 
-# Search
+# 搜索
 polymarket markets search "bitcoin" --limit 5
 
-# Get tags for a market
+# 获取市场的标签
 polymarket markets tags 12345
 ```
 
-**Flags for `markets list`**: `--limit`, `--offset`, `--order`, `--ascending`, `--active`, `--closed`
+**`markets list` 参数**: `--limit`, `--offset`, `--order`, `--ascending`, `--active`, `--closed`
 
-### Events
+### 事件
 
-Events group related markets (e.g. "2024 Election" contains multiple yes/no markets).
+事件将相关市场分组（例如 "2024 选举" 包含多个是/否市场）。
 
 ```bash
 polymarket events list --limit 10
@@ -166,68 +166,68 @@ polymarket events get 500
 polymarket events tags 500
 ```
 
-**Flags for `events list`**: `--limit`, `--offset`, `--order`, `--ascending`, `--active`, `--closed`, `--tag`
+**`events list` 参数**: `--limit`, `--offset`, `--order`, `--ascending`, `--active`, `--closed`, `--tag`
 
-### Tags, Series, Comments, Profiles, Sports
+### 标签、系列、评论、个人资料、体育
 
 ```bash
-# Tags
+# 标签
 polymarket tags list
 polymarket tags get politics
 polymarket tags related politics
 polymarket tags related-tags politics
 
-# Series (recurring events)
+# 系列（周期性事件）
 polymarket series list --limit 10
 polymarket series get 42
 
-# Comments on an entity
+# 实体的评论
 polymarket comments list --entity-type event --entity-id 500
 polymarket comments get abc123
 polymarket comments by-user 0xf5E6...
 
-# Public profiles
+# 公开个人资料
 polymarket profiles get 0xf5E6...
 
-# Sports metadata
+# 体育元数据
 polymarket sports list
 polymarket sports market-types
 polymarket sports teams --league NFL --limit 32
 ```
 
-### Order Book & Prices (CLOB)
+### 订单簿与价格 (CLOB)
 
-All read-only — no wallet needed.
+所有命令都是只读的 —— 无需钱包。
 
 ```bash
-# Check API health
+# 检查 API 健康状态
 polymarket clob ok
 
-# Prices
+# 价格
 polymarket clob price 48331043336612883... --side buy
 polymarket clob midpoint 48331043336612883...
 polymarket clob spread 48331043336612883...
 
-# Batch queries (comma-separated token IDs)
+# 批量查询（逗号分隔的代币 ID）
 polymarket clob batch-prices "TOKEN1,TOKEN2" --side buy
 polymarket clob midpoints "TOKEN1,TOKEN2"
 polymarket clob spreads "TOKEN1,TOKEN2"
 
-# Order book
+# 订单簿
 polymarket clob book 48331043336612883...
 polymarket clob books "TOKEN1,TOKEN2"
 
-# Last trade
+# 最近交易
 polymarket clob last-trade 48331043336612883...
 
-# Market info
-polymarket clob market 0xABC123...  # by condition ID
-polymarket clob markets             # list all
+# 市场信息
+polymarket clob market 0xABC123...  # 按 condition ID
+polymarket clob markets             # 列出所有
 
-# Price history
+# 价格历史
 polymarket clob price-history 48331043336612883... --interval 1d --fidelity 30
 
-# Metadata
+# 元数据
 polymarket clob tick-size 48331043336612883...
 polymarket clob fee-rate 48331043336612883...
 polymarket clob neg-risk 48331043336612883...
@@ -235,51 +235,51 @@ polymarket clob time
 polymarket clob geoblock
 ```
 
-**Interval options for `price-history`**: `1m`, `1h`, `6h`, `1d`, `1w`, `max`
+**`price-history` 时间间隔选项**: `1m`, `1h`, `6h`, `1d`, `1w`, `max`
 
-### Trading (CLOB, authenticated)
+### 交易 (CLOB，需认证)
 
-Requires a configured wallet.
+需要配置钱包。
 
 ```bash
-# Place a limit order (buy 10 shares at $0.50)
+# 下限价单（以 $0.50 买入 10 份）
 polymarket clob create-order \
   --token 48331043336612883... \
   --side buy --price 0.50 --size 10
 
-# Place a market order (buy $5 worth)
+# 下市价单（买入 $5 价值）
 polymarket clob market-order \
   --token 48331043336612883... \
   --side buy --amount 5
 
-# Post multiple orders at once
+# 同时发布多个订单
 polymarket clob post-orders \
   --tokens "TOKEN1,TOKEN2" \
   --side buy \
   --prices "0.40,0.60" \
   --sizes "10,10"
 
-# Cancel
+# 取消订单
 polymarket clob cancel ORDER_ID
 polymarket clob cancel-orders "ORDER1,ORDER2"
 polymarket clob cancel-market --market 0xCONDITION...
 polymarket clob cancel-all
 
-# View your orders and trades
+# 查看订单和交易记录
 polymarket clob orders
 polymarket clob orders --market 0xCONDITION...
 polymarket clob order ORDER_ID
 polymarket clob trades
 
-# Check balances
+# 查询余额
 polymarket clob balance --asset-type collateral
 polymarket clob balance --asset-type conditional --token 48331043336612883...
 polymarket clob update-balance --asset-type collateral
 ```
 
-**Order types**: `GTC` (default), `FOK`, `GTD`, `FAK`. Add `--post-only` for limit orders.
+**订单类型**: `GTC`（默认）、`FOK`、`GTD`、`FAK`。限价单可添加 `--post-only`。
 
-### Rewards & API Keys (CLOB, authenticated)
+### 奖励与 API 密钥 (CLOB，需认证)
 
 ```bash
 polymarket clob rewards --date 2024-06-15
@@ -289,115 +289,115 @@ polymarket clob reward-percentages
 polymarket clob current-rewards
 polymarket clob market-reward 0xCONDITION...
 
-# Check if orders are scoring rewards
+# 检查订单是否获得奖励
 polymarket clob order-scoring ORDER_ID
 polymarket clob orders-scoring "ORDER1,ORDER2"
 
-# API key management
+# API 密钥管理
 polymarket clob api-keys
 polymarket clob create-api-key
 polymarket clob delete-api-key
 
-# Account status
+# 账户状态
 polymarket clob account-status
 polymarket clob notifications
 polymarket clob delete-notifications "NOTIF1,NOTIF2"
 ```
 
-### On-Chain Data
+### 链上数据
 
-Public data — no wallet needed.
+公开数据 —— 无需钱包。
 
 ```bash
-# Portfolio
+# 投资组合
 polymarket data positions 0xWALLET_ADDRESS
 polymarket data closed-positions 0xWALLET_ADDRESS
 polymarket data value 0xWALLET_ADDRESS
 polymarket data traded 0xWALLET_ADDRESS
 
-# Trade history
+# 交易历史
 polymarket data trades 0xWALLET_ADDRESS --limit 50
 
-# Activity
+# 活动记录
 polymarket data activity 0xWALLET_ADDRESS
 
-# Market data
+# 市场数据
 polymarket data holders 0xCONDITION_ID
 polymarket data open-interest 0xCONDITION_ID
 polymarket data volume 12345  # event ID
 
-# Leaderboards
+# 排行榜
 polymarket data leaderboard --period month --order-by pnl --limit 10
 polymarket data builder-leaderboard --period week
 polymarket data builder-volume --period month
 ```
 
-### Contract Approvals
+### 合约授权
 
-Before trading, Polymarket contracts need ERC-20 (USDC) and ERC-1155 (CTF token) approvals.
+交易前，Polymarket 合约需要 ERC-20 (USDC) 和 ERC-1155 (CTF 代币) 授权。
 
 ```bash
-# Check current approvals (read-only)
+# 检查当前授权状态（只读）
 polymarket approve check
 polymarket approve check 0xSOME_ADDRESS
 
-# Approve all contracts (sends 6 on-chain transactions, needs MATIC for gas)
+# 授权所有合约（发送 6 笔链上交易，需要 MATIC 支付 gas）
 polymarket approve set
 ```
 
-### CTF Operations
+### CTF 操作
 
-Split, merge, and redeem conditional tokens directly on-chain.
+直接在链上拆分、合并和赎回条件代币。
 
 ```bash
-# Split $10 USDC into YES/NO tokens
+# 将 $10 USDC 拆分为 YES/NO 代币
 polymarket ctf split --condition 0xCONDITION... --amount 10
 
-# Merge tokens back to USDC
+# 将代币合并回 USDC
 polymarket ctf merge --condition 0xCONDITION... --amount 10
 
-# Redeem winning tokens after resolution
+# 结算后赎回获胜代币
 polymarket ctf redeem --condition 0xCONDITION...
 
-# Redeem neg-risk positions
+# 赎回负风险持仓
 polymarket ctf redeem-neg-risk --condition 0xCONDITION... --amounts "10,5"
 
-# Calculate IDs (read-only, no wallet needed)
+# 计算 ID（只读，无需钱包）
 polymarket ctf condition-id --oracle 0xORACLE... --question 0xQUESTION... --outcomes 2
 polymarket ctf collection-id --condition 0xCONDITION... --index-set 1
 polymarket ctf position-id --collection 0xCOLLECTION...
 ```
 
-`--amount` is in USDC (e.g., `10` = $10). The `--partition` flag defaults to binary (`1,2`). On-chain operations require MATIC for gas on Polygon.
+`--amount` 以 USDC 为单位（例如 `10` = $10）。`--partition` 参数默认为二进制 (`1,2`)。链上操作需要在 Polygon 上支付 MATIC 作为 gas。
 
-### Bridge
+### 跨链桥
 
-Deposit assets from other chains into Polymarket.
+从其他链向 Polymarket 存入资产。
 
 ```bash
-# Get deposit addresses (EVM, Solana, Bitcoin)
+# 获取存款地址（EVM、Solana、Bitcoin）
 polymarket bridge deposit 0xWALLET_ADDRESS
 
-# List supported chains and tokens
+# 列出支持的链和代币
 polymarket bridge supported-assets
 
-# Check deposit status
+# 检查存款状态
 polymarket bridge status 0xDEPOSIT_ADDRESS
 ```
 
-### Wallet Management
+### 钱包管理
 
 ```bash
-polymarket wallet create               # Generate new random wallet
-polymarket wallet create --force       # Overwrite existing
-polymarket wallet import 0xKEY...      # Import existing key
-polymarket wallet address              # Print wallet address
-polymarket wallet show                 # Full wallet info (address, source, config path)
-polymarket wallet reset                # Delete config (prompts for confirmation)
-polymarket wallet reset --force        # Delete without confirmation
+polymarket wallet create               # 生成新的随机钱包
+polymarket wallet create --force       # 覆盖现有钱包
+polymarket wallet import 0xKEY...      # 导入现有密钥
+polymarket wallet address              # 打印钱包地址
+polymarket wallet show                 # 完整钱包信息（地址、来源、配置路径）
+polymarket wallet reset                # 删除配置（会提示确认）
+polymarket wallet reset --force        # 无需确认直接删除
 ```
 
-### Interactive Shell
+### 交互式 Shell
 
 ```bash
 polymarket shell
@@ -406,21 +406,21 @@ polymarket shell
 # polymarket> exit
 ```
 
-Supports command history. All commands work the same as the CLI, just without the `polymarket` prefix.
+支持命令历史记录。所有命令与 CLI 相同，只是不需要 `polymarket` 前缀。
 
-### Other
+### 其他
 
 ```bash
-polymarket status     # API health check
-polymarket setup      # Guided first-time setup wizard
-polymarket upgrade    # Update to the latest version
+polymarket status     # API 健康检查
+polymarket setup      # 引导式首次设置向导
+polymarket upgrade    # 更新到最新版本
 polymarket --version
 polymarket --help
 ```
 
-## Common Workflows
+## 常用工作流程
 
-### Browse and research markets
+### 浏览和研究市场
 
 ```bash
 polymarket markets search "bitcoin" --limit 5
@@ -429,16 +429,16 @@ polymarket clob book 48331043336612883...
 polymarket clob price-history 48331043336612883... --interval 1d
 ```
 
-### Set up a new wallet and start trading
+### 设置新钱包并开始交易
 
 ```bash
 polymarket wallet create
-polymarket approve set                    # needs MATIC for gas
+polymarket approve set                    # 需要 MATIC 支付 gas
 polymarket clob balance --asset-type collateral
 polymarket clob market-order --token TOKEN_ID --side buy --amount 5
 ```
 
-### Monitor your portfolio
+### 监控投资组合
 
 ```bash
 polymarket data positions 0xYOUR_ADDRESS
@@ -447,49 +447,49 @@ polymarket clob orders
 polymarket clob trades
 ```
 
-### Place and manage limit orders
+### 下单和管理限价单
 
 ```bash
-# Place order
+# 下单
 polymarket clob create-order --token TOKEN_ID --side buy --price 0.45 --size 20
 
-# Check it
+# 查看
 polymarket clob orders
 
-# Cancel if needed
+# 需要时取消
 polymarket clob cancel ORDER_ID
 
-# Or cancel everything
+# 或取消所有订单
 polymarket clob cancel-all
 ```
 
-### Script with JSON output
+### 使用 JSON 输出编写脚本
 
 ```bash
-# Pipe market data to jq
+# 通过管道将市场数据传给 jq
 polymarket -o json markets list --limit 100 | jq '.[].question'
 
-# Check prices programmatically
+# 编程方式查询价格
 polymarket -o json clob midpoint TOKEN_ID | jq '.mid'
 
-# Error handling in scripts
+# 脚本中的错误处理
 if ! result=$(polymarket -o json clob balance --asset-type collateral 2>/dev/null); then
-  echo "Failed to fetch balance"
+  echo "获取余额失败"
 fi
 ```
 
-## Architecture
+## 架构
 
 ```
 src/
-  main.rs        -- CLI entry point, clap parsing, error handling
-  auth.rs        -- Wallet resolution, RPC provider, CLOB authentication
-  config.rs      -- Config file (~/.config/polymarket/config.json)
-  shell.rs       -- Interactive REPL
-  commands/      -- One module per command group
-  output/        -- Table and JSON rendering per command group
+  main.rs        -- CLI 入口点，clap 解析，错误处理
+  auth.rs        -- 钱包解析，RPC 提供者，CLOB 认证
+  config.rs      -- 配置文件 (~/.config/polymarket/config.json)
+  shell.rs       -- 交互式 REPL
+  commands/      -- 每个命令组一个模块
+  output/        -- 每个命令组的表格和 JSON 渲染
 ```
 
-## License
+## 许可证
 
 MIT
