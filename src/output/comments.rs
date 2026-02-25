@@ -2,7 +2,7 @@ use polymarket_client_sdk::gamma::types::response::Comment;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{detail_field, print_detail_table, truncate};
+use super::{NONE, detail_field, format_date, print_detail_table, truncate};
 
 #[derive(Tabled)]
 struct CommentRow {
@@ -24,20 +24,21 @@ fn comment_author(c: &Comment) -> String {
         .and_then(|p| p.name.as_deref().or(p.pseudonym.as_deref()))
         .map(String::from)
         .or_else(|| c.user_address.map(|a| truncate(&format!("{a}"), 10)))
-        .unwrap_or_else(|| "—".into())
+        .unwrap_or_else(|| NONE.into())
 }
 
 fn comment_to_row(c: &Comment) -> CommentRow {
     CommentRow {
         id: truncate(&c.id, 12),
         author: comment_author(c),
-        body: truncate(c.body.as_deref().unwrap_or("—"), 60),
+        body: truncate(c.body.as_deref().unwrap_or(NONE), 60),
         reactions: c
             .reaction_count
-            .map_or_else(|| "—".into(), |n| n.to_string()),
+            .map_or_else(|| NONE.into(), |n| n.to_string()),
         created: c
             .created_at
-            .map_or_else(|| "—".into(), |d| d.format("%Y-%m-%d %H:%M").to_string()),
+            .as_ref()
+            .map_or_else(|| NONE.into(), format_date),
     }
 }
 
@@ -91,7 +92,7 @@ pub fn print_comment_detail(c: &Comment) {
         rows,
         "Reactions",
         c.reaction_count
-            .map_or_else(|| "—".into(), |n| n.to_string())
+            .map_or_else(|| NONE.into(), |n| n.to_string())
     );
     detail_field!(
         rows,
@@ -101,12 +102,12 @@ pub fn print_comment_detail(c: &Comment) {
     detail_field!(
         rows,
         "Created At",
-        c.created_at.map(|d| d.to_string()).unwrap_or_default()
+        c.created_at.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
         "Updated At",
-        c.updated_at.map(|d| d.to_string()).unwrap_or_default()
+        c.updated_at.as_ref().map(format_date).unwrap_or_default()
     );
 
     print_detail_table(rows);

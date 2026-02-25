@@ -81,15 +81,7 @@ pub enum EntityType {
     Series,
 }
 
-impl From<EntityType> for ParentEntityType {
-    fn from(e: EntityType) -> Self {
-        match e {
-            EntityType::Event => ParentEntityType::Event,
-            EntityType::Market => ParentEntityType::Market,
-            EntityType::Series => ParentEntityType::Series,
-        }
-    }
-}
+super::enum_from!(EntityType => ParentEntityType { Event, Market, Series });
 
 pub async fn execute(
     client: &gamma::Client,

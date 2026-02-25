@@ -11,11 +11,15 @@ pub mod series;
 pub mod sports;
 pub mod tags;
 
+use chrono::{DateTime, Utc};
 use polymarket_client_sdk::types::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use tabled::Table;
 use tabled::settings::object::Columns;
 use tabled::settings::{Modify, Style, Width};
+
+/// Display string for missing/null values in table output.
+pub const NONE: &str = "—";
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum OutputFormat {
@@ -43,6 +47,10 @@ pub fn format_decimal(n: Decimal) -> String {
     }
 }
 
+pub fn format_date(d: &DateTime<Utc>) -> String {
+    d.format("%Y-%m-%d %H:%M UTC").to_string()
+}
+
 pub fn active_status(closed: Option<bool>, active: Option<bool>) -> &'static str {
     if closed == Some(true) {
         "Closed"
@@ -56,6 +64,18 @@ pub fn active_status(closed: Option<bool>, active: Option<bool>) -> &'static str
 pub fn print_json(data: &impl serde::Serialize) -> anyhow::Result<()> {
     println!("{}", serde_json::to_string_pretty(data)?);
     Ok(())
+}
+
+/// Print an error in the appropriate format for the current output mode.
+pub fn print_error(error: &anyhow::Error, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::json!({"error": error.to_string()}));
+        }
+        OutputFormat::Table => {
+            eprintln!("Error: {error}");
+        }
+    }
 }
 
 pub fn print_detail_table(rows: Vec<[String; 2]>) {

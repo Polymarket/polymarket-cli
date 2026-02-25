@@ -72,14 +72,7 @@ async fn main() -> ExitCode {
     let output = cli.output;
 
     if let Err(e) = run(cli).await {
-        match output {
-            OutputFormat::Json => {
-                println!("{}", serde_json::json!({"error": e.to_string()}));
-            }
-            OutputFormat::Table => {
-                eprintln!("Error: {e}");
-            }
-        }
+        output::print_error(&e, output);
         return ExitCode::FAILURE;
     }
 

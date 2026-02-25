@@ -2,7 +2,7 @@ use polymarket_client_sdk::gamma::types::response::Event;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{active_status, detail_field, format_decimal, print_detail_table, truncate};
+use super::{NONE, active_status, detail_field, format_date, format_decimal, print_detail_table, truncate};
 
 #[derive(Tabled)]
 struct EventRow {
@@ -19,17 +19,17 @@ struct EventRow {
 }
 
 fn event_to_row(e: &Event) -> EventRow {
-    let title = e.title.as_deref().unwrap_or("—");
+    let title = e.title.as_deref().unwrap_or(NONE);
     let market_count = e
         .markets
         .as_ref()
-        .map_or_else(|| "—".into(), |m| m.len().to_string());
+        .map_or_else(|| NONE.into(), |m| m.len().to_string());
 
     EventRow {
         title: truncate(title, 60),
         market_count,
-        volume: e.volume.map_or_else(|| "—".into(), format_decimal),
-        liquidity: e.liquidity.map_or_else(|| "—".into(), format_decimal),
+        volume: e.volume.map_or_else(|| NONE.into(), format_decimal),
+        liquidity: e.liquidity.map_or_else(|| NONE.into(), format_decimal),
         status: active_status(e.closed, e.active).into(),
     }
 }
@@ -125,17 +125,17 @@ pub fn print_event_detail(e: &Event) {
     detail_field!(
         rows,
         "Start Date",
-        e.start_date.map(|d| d.to_string()).unwrap_or_default()
+        e.start_date.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
         "End Date",
-        e.end_date.map(|d| d.to_string()).unwrap_or_default()
+        e.end_date.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
         "Created At",
-        e.created_at.map(|d| d.to_string()).unwrap_or_default()
+        e.created_at.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,

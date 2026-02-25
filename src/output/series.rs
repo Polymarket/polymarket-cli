@@ -2,7 +2,7 @@ use polymarket_client_sdk::gamma::types::response::Series;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{detail_field, format_decimal, print_detail_table, truncate};
+use super::{NONE, active_status, detail_field, format_date, format_decimal, print_detail_table, truncate};
 
 #[derive(Tabled)]
 struct SeriesRow {
@@ -18,23 +18,13 @@ struct SeriesRow {
     status: String,
 }
 
-fn series_status(s: &Series) -> &'static str {
-    if s.closed == Some(true) {
-        "Closed"
-    } else if s.active == Some(true) {
-        "Active"
-    } else {
-        "Inactive"
-    }
-}
-
 fn series_to_row(s: &Series) -> SeriesRow {
     SeriesRow {
-        title: truncate(s.title.as_deref().unwrap_or("—"), 50),
-        series_type: s.series_type.as_deref().unwrap_or("—").into(),
-        volume: s.volume.map_or_else(|| "—".into(), format_decimal),
-        liquidity: s.liquidity.map_or_else(|| "—".into(), format_decimal),
-        status: series_status(s).into(),
+        title: truncate(s.title.as_deref().unwrap_or(NONE), 50),
+        series_type: s.series_type.as_deref().unwrap_or(NONE).into(),
+        volume: s.volume.map_or_else(|| NONE.into(), format_decimal),
+        liquidity: s.liquidity.map_or_else(|| NONE.into(), format_decimal),
+        status: active_status(s.closed, s.active).into(),
     }
 }
 
@@ -76,7 +66,7 @@ pub fn print_series_detail(s: &Series) {
         "Volume (24hr)",
         s.volume_24hr.map(format_decimal).unwrap_or_default()
     );
-    detail_field!(rows, "Status", series_status(s).into());
+    detail_field!(rows, "Status", active_status(s.closed, s.active).into());
     detail_field!(
         rows,
         "Events",
@@ -93,12 +83,12 @@ pub fn print_series_detail(s: &Series) {
     detail_field!(
         rows,
         "Start Date",
-        s.start_date.map(|d| d.to_string()).unwrap_or_default()
+        s.start_date.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
         "Created At",
-        s.created_at.map(|d| d.to_string()).unwrap_or_default()
+        s.created_at.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,

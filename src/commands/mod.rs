@@ -17,6 +17,19 @@ pub mod tags;
 pub mod upgrade;
 pub mod wallet;
 
+/// Implement `From<CliEnum>` for an SDK enum when variant names match 1:1.
+macro_rules! enum_from {
+    ($from:ty => $to:ty { $($variant:ident),+ $(,)? }) => {
+        impl From<$from> for $to {
+            fn from(v: $from) -> Self {
+                match v { $( <$from>::$variant => <$to>::$variant, )+ }
+            }
+        }
+    };
+}
+
+pub(crate) use enum_from;
+
 pub fn is_numeric_id(id: &str) -> bool {
     id.parse::<u64>().is_ok()
 }

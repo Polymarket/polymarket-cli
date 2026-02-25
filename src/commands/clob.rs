@@ -397,14 +397,7 @@ pub enum CliSide {
     Sell,
 }
 
-impl From<CliSide> for Side {
-    fn from(s: CliSide) -> Self {
-        match s {
-            CliSide::Buy => Side::Buy,
-            CliSide::Sell => Side::Sell,
-        }
-    }
-}
+super::enum_from!(CliSide => Side { Buy, Sell });
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum CliInterval {
@@ -421,18 +414,7 @@ pub enum CliInterval {
     Max,
 }
 
-impl From<CliInterval> for Interval {
-    fn from(i: CliInterval) -> Self {
-        match i {
-            CliInterval::OneMinute => Interval::OneMinute,
-            CliInterval::OneHour => Interval::OneHour,
-            CliInterval::SixHours => Interval::SixHours,
-            CliInterval::OneDay => Interval::OneDay,
-            CliInterval::OneWeek => Interval::OneWeek,
-            CliInterval::Max => Interval::Max,
-        }
-    }
-}
+super::enum_from!(CliInterval => Interval { OneMinute, OneHour, SixHours, OneDay, OneWeek, Max });
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum CliOrderType {
@@ -463,14 +445,7 @@ pub enum CliAssetType {
     Conditional,
 }
 
-impl From<CliAssetType> for AssetType {
-    fn from(a: CliAssetType) -> Self {
-        match a {
-            CliAssetType::Collateral => AssetType::Collateral,
-            CliAssetType::Conditional => AssetType::Conditional,
-        }
-    }
-}
+super::enum_from!(CliAssetType => AssetType { Collateral, Conditional });
 
 fn parse_token_id(s: &str) -> Result<U256> {
     U256::from_str(s).map_err(|_| anyhow::anyhow!("Invalid token ID: {s}"))
@@ -721,7 +696,35 @@ async fn execute_read(command: ClobCommand, output: &OutputFormat) -> Result<()>
             print_geoblock(&result, output)?;
         }
 
-        _ => unreachable!(),
+        // Trade, reward, and account commands are dispatched by execute() above.
+        ClobCommand::Orders { .. }
+        | ClobCommand::Order { .. }
+        | ClobCommand::CreateOrder { .. }
+        | ClobCommand::PostOrders { .. }
+        | ClobCommand::MarketOrder { .. }
+        | ClobCommand::Cancel { .. }
+        | ClobCommand::CancelOrders { .. }
+        | ClobCommand::CancelAll
+        | ClobCommand::CancelMarket { .. }
+        | ClobCommand::Trades { .. }
+        | ClobCommand::Balance { .. }
+        | ClobCommand::UpdateBalance { .. }
+        | ClobCommand::Notifications
+        | ClobCommand::DeleteNotifications { .. }
+        | ClobCommand::Rewards { .. }
+        | ClobCommand::Earnings { .. }
+        | ClobCommand::EarningsMarkets { .. }
+        | ClobCommand::RewardPercentages
+        | ClobCommand::CurrentRewards { .. }
+        | ClobCommand::MarketReward { .. }
+        | ClobCommand::OrderScoring { .. }
+        | ClobCommand::OrdersScoring { .. }
+        | ClobCommand::ApiKeys
+        | ClobCommand::DeleteApiKey
+        | ClobCommand::CreateApiKey
+        | ClobCommand::AccountStatus => {
+            unreachable!("execute() routes authenticated commands to other handlers")
+        }
     }
 
     Ok(())
@@ -938,7 +941,43 @@ async fn execute_trade(
             }
         }
 
-        _ => unreachable!(),
+        // Read, reward, and account commands are dispatched by execute() above.
+        ClobCommand::Ok
+        | ClobCommand::Price { .. }
+        | ClobCommand::BatchPrices { .. }
+        | ClobCommand::Midpoint { .. }
+        | ClobCommand::Midpoints { .. }
+        | ClobCommand::Spread { .. }
+        | ClobCommand::Spreads { .. }
+        | ClobCommand::Book { .. }
+        | ClobCommand::Books { .. }
+        | ClobCommand::LastTrade { .. }
+        | ClobCommand::LastTrades { .. }
+        | ClobCommand::Market { .. }
+        | ClobCommand::Markets { .. }
+        | ClobCommand::SamplingMarkets { .. }
+        | ClobCommand::SimplifiedMarkets { .. }
+        | ClobCommand::SamplingSimpMarkets { .. }
+        | ClobCommand::TickSize { .. }
+        | ClobCommand::FeeRate { .. }
+        | ClobCommand::NegRisk { .. }
+        | ClobCommand::PriceHistory { .. }
+        | ClobCommand::Time
+        | ClobCommand::Geoblock
+        | ClobCommand::Rewards { .. }
+        | ClobCommand::Earnings { .. }
+        | ClobCommand::EarningsMarkets { .. }
+        | ClobCommand::RewardPercentages
+        | ClobCommand::CurrentRewards { .. }
+        | ClobCommand::MarketReward { .. }
+        | ClobCommand::OrderScoring { .. }
+        | ClobCommand::OrdersScoring { .. }
+        | ClobCommand::ApiKeys
+        | ClobCommand::DeleteApiKey
+        | ClobCommand::CreateApiKey
+        | ClobCommand::AccountStatus => {
+            unreachable!("execute() routes non-trade commands to other handlers")
+        }
     }
 
     Ok(())
@@ -1006,7 +1045,49 @@ async fn execute_rewards(
             print_orders_scoring(&result, output)?;
         }
 
-        _ => unreachable!(),
+        // Read, trade, and account commands are dispatched by execute() above.
+        ClobCommand::Ok
+        | ClobCommand::Price { .. }
+        | ClobCommand::BatchPrices { .. }
+        | ClobCommand::Midpoint { .. }
+        | ClobCommand::Midpoints { .. }
+        | ClobCommand::Spread { .. }
+        | ClobCommand::Spreads { .. }
+        | ClobCommand::Book { .. }
+        | ClobCommand::Books { .. }
+        | ClobCommand::LastTrade { .. }
+        | ClobCommand::LastTrades { .. }
+        | ClobCommand::Market { .. }
+        | ClobCommand::Markets { .. }
+        | ClobCommand::SamplingMarkets { .. }
+        | ClobCommand::SimplifiedMarkets { .. }
+        | ClobCommand::SamplingSimpMarkets { .. }
+        | ClobCommand::TickSize { .. }
+        | ClobCommand::FeeRate { .. }
+        | ClobCommand::NegRisk { .. }
+        | ClobCommand::PriceHistory { .. }
+        | ClobCommand::Time
+        | ClobCommand::Geoblock
+        | ClobCommand::Orders { .. }
+        | ClobCommand::Order { .. }
+        | ClobCommand::CreateOrder { .. }
+        | ClobCommand::PostOrders { .. }
+        | ClobCommand::MarketOrder { .. }
+        | ClobCommand::Cancel { .. }
+        | ClobCommand::CancelOrders { .. }
+        | ClobCommand::CancelAll
+        | ClobCommand::CancelMarket { .. }
+        | ClobCommand::Trades { .. }
+        | ClobCommand::Balance { .. }
+        | ClobCommand::UpdateBalance { .. }
+        | ClobCommand::Notifications
+        | ClobCommand::DeleteNotifications { .. }
+        | ClobCommand::ApiKeys
+        | ClobCommand::DeleteApiKey
+        | ClobCommand::CreateApiKey
+        | ClobCommand::AccountStatus => {
+            unreachable!("execute() routes non-reward commands to other handlers")
+        }
     }
 
     Ok(())
@@ -1043,7 +1124,54 @@ async fn execute_account(
             print_account_status(&result, output)?;
         }
 
-        _ => unreachable!(),
+        // Read, trade, and reward commands are dispatched by execute() above.
+        ClobCommand::Ok
+        | ClobCommand::Price { .. }
+        | ClobCommand::BatchPrices { .. }
+        | ClobCommand::Midpoint { .. }
+        | ClobCommand::Midpoints { .. }
+        | ClobCommand::Spread { .. }
+        | ClobCommand::Spreads { .. }
+        | ClobCommand::Book { .. }
+        | ClobCommand::Books { .. }
+        | ClobCommand::LastTrade { .. }
+        | ClobCommand::LastTrades { .. }
+        | ClobCommand::Market { .. }
+        | ClobCommand::Markets { .. }
+        | ClobCommand::SamplingMarkets { .. }
+        | ClobCommand::SimplifiedMarkets { .. }
+        | ClobCommand::SamplingSimpMarkets { .. }
+        | ClobCommand::TickSize { .. }
+        | ClobCommand::FeeRate { .. }
+        | ClobCommand::NegRisk { .. }
+        | ClobCommand::PriceHistory { .. }
+        | ClobCommand::Time
+        | ClobCommand::Geoblock
+        | ClobCommand::Orders { .. }
+        | ClobCommand::Order { .. }
+        | ClobCommand::CreateOrder { .. }
+        | ClobCommand::PostOrders { .. }
+        | ClobCommand::MarketOrder { .. }
+        | ClobCommand::Cancel { .. }
+        | ClobCommand::CancelOrders { .. }
+        | ClobCommand::CancelAll
+        | ClobCommand::CancelMarket { .. }
+        | ClobCommand::Trades { .. }
+        | ClobCommand::Balance { .. }
+        | ClobCommand::UpdateBalance { .. }
+        | ClobCommand::Notifications
+        | ClobCommand::DeleteNotifications { .. }
+        | ClobCommand::Rewards { .. }
+        | ClobCommand::Earnings { .. }
+        | ClobCommand::EarningsMarkets { .. }
+        | ClobCommand::RewardPercentages
+        | ClobCommand::CurrentRewards { .. }
+        | ClobCommand::MarketReward { .. }
+        | ClobCommand::OrderScoring { .. }
+        | ClobCommand::OrdersScoring { .. }
+        | ClobCommand::CreateApiKey => {
+            unreachable!("execute() routes non-account commands to other handlers")
+        }
     }
 
     Ok(())

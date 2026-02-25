@@ -1,6 +1,4 @@
-use clap::Parser;
-
-use crate::output::OutputFormat;
+use clap::Parser as _;
 
 pub async fn run_shell() {
     println!();
@@ -48,14 +46,7 @@ pub async fn run_shell() {
                     Ok(cli) => {
                         let output = cli.output;
                         if let Err(e) = crate::run(cli).await {
-                            match output {
-                                OutputFormat::Json => {
-                                    println!("{}", serde_json::json!({"error": e.to_string()}));
-                                }
-                                OutputFormat::Table => {
-                                    eprintln!("Error: {e}");
-                                }
-                            }
+                            crate::output::print_error(&e, output);
                         }
                     }
                     Err(e) => {

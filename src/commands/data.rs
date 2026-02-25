@@ -164,16 +164,7 @@ pub enum TimePeriod {
     All,
 }
 
-impl From<TimePeriod> for polymarket_client_sdk::data::types::TimePeriod {
-    fn from(t: TimePeriod) -> Self {
-        match t {
-            TimePeriod::Day => Self::Day,
-            TimePeriod::Week => Self::Week,
-            TimePeriod::Month => Self::Month,
-            TimePeriod::All => Self::All,
-        }
-    }
-}
+super::enum_from!(TimePeriod => polymarket_client_sdk::data::types::TimePeriod { Day, Week, Month, All });
 
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum OrderBy {
@@ -181,14 +172,7 @@ pub enum OrderBy {
     Vol,
 }
 
-impl From<OrderBy> for polymarket_client_sdk::data::types::LeaderboardOrderBy {
-    fn from(o: OrderBy) -> Self {
-        match o {
-            OrderBy::Pnl => Self::Pnl,
-            OrderBy::Vol => Self::Vol,
-        }
-    }
-}
+super::enum_from!(OrderBy => polymarket_client_sdk::data::types::LeaderboardOrderBy { Pnl, Vol });
 
 pub async fn execute(client: &data::Client, args: DataArgs, output: OutputFormat) -> Result<()> {
     match args.command {
