@@ -28,6 +28,7 @@ pub enum KeySource {
     Flag,
     EnvVar,
     ConfigFile,
+    Keystore,
     None,
 }
 
@@ -37,6 +38,7 @@ impl KeySource {
             Self::Flag => "--private-key flag",
             Self::EnvVar => "POLYMARKET_PRIVATE_KEY env var",
             Self::ConfigFile => "config file",
+            Self::Keystore => "encrypted keystore",
             Self::None => "not configured",
         }
     }

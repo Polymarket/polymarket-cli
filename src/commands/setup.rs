@@ -84,12 +84,33 @@ pub fn execute() -> Result<()> {
 
     step_header(1, total, "Wallet");
 
-    let address = if config::config_exists() {
-        let (key, source) = config::resolve_key(None);
-        if let Some(k) = &key
-            && let Ok(signer) = LocalSigner::from_str(k)
-        {
-            let addr = signer.address();
+    let address = if config::config_exists() || config::keystore_exists() {
+        // Try plaintext config first, then encrypted keystore
+        let existing_addr = {
+            let (key, _) = config::resolve_key(None);
+            key.as_deref()
+                .and_then(|k| LocalSigner::from_str(k).ok())
+                .map(|s| s.address())
+        }
+        .or_else(|| {
+            if config::keystore_exists() {
+                crate::password::prompt_password_with_retries(|pw| {
+                    config::load_key_encrypted(pw)
+                })
+                .ok()
+                .and_then(|k| LocalSigner::from_str(&k).ok())
+                .map(|s| s.address())
+            } else {
+                None
+            }
+        });
+
+        if let Some(addr) = existing_addr {
+            let source = if config::keystore_exists() {
+                config::KeySource::Keystore
+            } else {
+                config::KeySource::ConfigFile
+            };
             println!("  ✓ Wallet already configured ({})", source.label());
             println!("    Address: {addr}");
             println!();

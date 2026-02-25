@@ -203,7 +203,7 @@ fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()>
             let result = crate::password::prompt_password_with_retries(|pw| {
                 config::load_key_encrypted(pw)
             });
-            (result, config::KeySource::ConfigFile)
+            (result, config::KeySource::Keystore)
         } else {
             (Err(anyhow::anyhow!("not configured")), config::KeySource::None)
         }

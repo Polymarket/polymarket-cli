@@ -21,16 +21,7 @@ fn parse_signature_type(s: &str) -> SignatureType {
 
 /// Resolve the private key hex string, prompting for password if needed.
 pub(crate) fn resolve_key_string(private_key: Option<&str>) -> Result<String> {
-    // Auto-migrate plaintext config to encrypted keystore
-    if config::needs_migration() {
-        eprintln!("Your wallet key is stored in plaintext. Encrypting it now...");
-        let password = crate::password::prompt_new_password()?;
-        config::migrate_to_encrypted(&password)?;
-        eprintln!("Wallet key encrypted successfully.");
-        return config::load_key_encrypted(&password);
-    }
-
-    // 1. CLI flag
+    // 1. CLI flag (highest priority — never overridden by migration)
     if let Some(key) = private_key {
         return Ok(key.to_string());
     }
@@ -39,6 +30,15 @@ pub(crate) fn resolve_key_string(private_key: Option<&str>) -> Result<String> {
         && !key.is_empty()
     {
         return Ok(key);
+    }
+
+    // Auto-migrate plaintext config to encrypted keystore
+    if config::needs_migration() {
+        eprintln!("Your wallet key is stored in plaintext. Encrypting it now...");
+        let password = crate::password::prompt_new_password()?;
+        config::migrate_to_encrypted(&password)?;
+        eprintln!("Wallet key encrypted successfully.");
+        return config::load_key_encrypted(&password);
     }
     // 3. Old config (plaintext — for backward compat)
     if let Some(cfg) = config::load_config()
