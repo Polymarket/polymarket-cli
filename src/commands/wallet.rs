@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::auth::LocalSigner;
 use polymarket_client_sdk::auth::Signer as _;
-use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use polymarket_client_sdk::{POLYGON, derive_safe_wallet};
 
 use crate::config;
 use crate::output::OutputFormat;
@@ -23,8 +23,8 @@ pub enum WalletCommand {
         /// Overwrite existing wallet
         #[arg(long)]
         force: bool,
-        /// Signature type: eoa, proxy (default), or gnosis-safe
-        #[arg(long, default_value = "proxy")]
+        /// Signature type: eoa, proxy, or gnosis-safe (default)
+        #[arg(long, default_value = "gnosis-safe")]
         signature_type: String,
     },
     /// Import an existing private key
@@ -34,8 +34,8 @@ pub enum WalletCommand {
         /// Overwrite existing wallet
         #[arg(long)]
         force: bool,
-        /// Signature type: eoa, proxy (default), or gnosis-safe
-        #[arg(long, default_value = "proxy")]
+        /// Signature type: eoa, proxy, or gnosis-safe (default)
+        #[arg(long, default_value = "gnosis-safe")]
         signature_type: String,
     },
     /// Show the address of the configured wallet
@@ -103,7 +103,7 @@ fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Resul
 
     config::save_wallet(&key_hex, POLYGON, signature_type)?;
     let config_path = config::config_path()?;
-    let proxy_addr = derive_proxy_wallet(address, POLYGON);
+    let proxy_addr = derive_safe_wallet(address, POLYGON);
 
     match output {
         OutputFormat::Json => {
@@ -144,7 +144,7 @@ fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &st
 
     config::save_wallet(&normalized, POLYGON, signature_type)?;
     let config_path = config::config_path()?;
-    let proxy_addr = derive_proxy_wallet(address, POLYGON);
+    let proxy_addr = derive_safe_wallet(address, POLYGON);
 
     match output {
         OutputFormat::Json => {
@@ -195,7 +195,7 @@ fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()>
     let address = signer.as_ref().map(|s| s.address().to_string());
     let proxy_addr = signer
         .as_ref()
-        .and_then(|s| derive_proxy_wallet(s.address(), POLYGON))
+        .and_then(|s| derive_safe_wallet(s.address(), POLYGON))
         .map(|a| a.to_string());
 
     let sig_type = config::resolve_signature_type(None);

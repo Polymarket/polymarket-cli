@@ -5,7 +5,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use polymarket_client_sdk::auth::{LocalSigner, Signer as _};
 use polymarket_client_sdk::types::Address;
-use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use polymarket_client_sdk::{POLYGON, derive_safe_wallet};
 
 use super::wallet::normalize_key;
 use crate::config;
@@ -156,7 +156,7 @@ fn finish_setup(address: Address) -> Result<()> {
 
     step_header(2, total, "Proxy Wallet");
 
-    let proxy = derive_proxy_wallet(address, POLYGON);
+    let proxy = derive_safe_wallet(address, POLYGON);
     match proxy {
         Some(proxy) => {
             println!("  ✓ Proxy wallet derived");

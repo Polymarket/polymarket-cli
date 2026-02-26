@@ -13,7 +13,7 @@ pub const RPC_URL: &str = "https://polygon.drpc.org";
 
 fn parse_signature_type(s: &str) -> SignatureType {
     match s {
-        config::DEFAULT_SIGNATURE_TYPE => SignatureType::Proxy,
+        "proxy" => SignatureType::Proxy,
         "gnosis-safe" => SignatureType::GnosisSafe,
         _ => SignatureType::Eoa,
     }
