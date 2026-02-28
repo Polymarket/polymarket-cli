@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
 const SIG_TYPE_ENV_VAR: &str = "POLYMARKET_SIGNATURE_TYPE";
-pub const DEFAULT_SIGNATURE_TYPE: &str = "proxy";
+pub const DEFAULT_SIGNATURE_TYPE: &str = "gnosis-safe";
 
 pub const NO_WALLET_MSG: &str =
     "No wallet configured. Run `polymarket wallet create` or `polymarket wallet import <key>`";
