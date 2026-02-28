@@ -5,7 +5,7 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use polymarket_client_sdk::auth::{LocalSigner, Signer as _};
 use polymarket_client_sdk::types::Address;
-use polymarket_client_sdk::{POLYGON, derive_safe_wallet};
+use polymarket_client_sdk::{POLYGON, derive_proxy_wallet, derive_safe_wallet};
 
 use super::wallet::normalize_key;
 use crate::config;
@@ -95,7 +95,7 @@ pub fn execute() -> Result<()> {
             println!();
 
             if !prompt_yn("  Reconfigure wallet?", false)? {
-                finish_setup(addr)?;
+                finish_setup(addr, &config::resolve_signature_type(None))?;
                 return Ok(());
             }
             println!();
@@ -107,7 +107,7 @@ pub fn execute() -> Result<()> {
 
     println!();
 
-    finish_setup(address)
+    finish_setup(address, &config::resolve_signature_type(None))
 }
 
 fn setup_wallet() -> Result<Address> {
@@ -151,12 +151,16 @@ fn setup_wallet() -> Result<Address> {
     Ok(address)
 }
 
-fn finish_setup(address: Address) -> Result<()> {
+fn finish_setup(address: Address, signature_type: &str) -> Result<()> {
     let total = 4;
 
     step_header(2, total, "Proxy Wallet");
 
-    let proxy = derive_safe_wallet(address, POLYGON);
+    let proxy = match signature_type {
+        "proxy" => derive_proxy_wallet(address, POLYGON),
+        "gnosis-safe" => derive_safe_wallet(address, POLYGON),
+        _ => None,
+    };
     match proxy {
         Some(proxy) => {
             println!("  ✓ Proxy wallet derived");
