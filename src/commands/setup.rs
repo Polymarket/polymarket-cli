@@ -5,9 +5,9 @@ use std::str::FromStr;
 use anyhow::{Context, Result};
 use polymarket_client_sdk::auth::{LocalSigner, Signer as _};
 use polymarket_client_sdk::types::Address;
-use polymarket_client_sdk::{POLYGON, derive_proxy_wallet, derive_safe_wallet};
+use polymarket_client_sdk::POLYGON;
 
-use super::wallet::normalize_key;
+use super::wallet::{derive_wallet_for_type, normalize_key};
 use crate::config;
 
 fn print_banner() {
@@ -156,11 +156,7 @@ fn finish_setup(address: Address, signature_type: &str) -> Result<()> {
 
     step_header(2, total, "Proxy Wallet");
 
-    let proxy = match signature_type {
-        "proxy" => derive_proxy_wallet(address, POLYGON),
-        "gnosis-safe" => derive_safe_wallet(address, POLYGON),
-        _ => None,
-    };
+    let proxy = derive_wallet_for_type(address, POLYGON, signature_type);
     match proxy {
         Some(proxy) => {
             println!("  ✓ Proxy wallet derived");

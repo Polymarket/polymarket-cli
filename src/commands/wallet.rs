@@ -16,7 +16,7 @@ use crate::output::OutputFormat;
 /// - `"proxy"` → EIP-1167 proxy wallet
 /// - `"gnosis-safe"` → Gnosis Safe wallet
 /// - `"eoa"` / other → `None` (no proxy wallet)
-fn derive_wallet_for_type(
+pub(crate) fn derive_wallet_for_type(
     address: Address,
     chain_id: u64,
     signature_type: &str,
