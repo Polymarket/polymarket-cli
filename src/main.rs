@@ -19,6 +19,10 @@ pub(crate) struct Cli {
     #[arg(short, long, global = true, default_value = "table")]
     pub(crate) output: OutputFormat,
 
+    /// Auto-refresh every N seconds (table output only)
+    #[arg(short, long, global = true)]
+    pub(crate) watch: Option<u64>,
+
     /// Private key (overrides env var and config file)
     #[arg(long, global = true)]
     private_key: Option<String>,
@@ -71,6 +75,18 @@ async fn main() -> ExitCode {
     let cli = Cli::parse();
     let output = cli.output;
 
+    if let Some(interval) = cli.watch {
+        if matches!(output, OutputFormat::Json) {
+            eprintln!("Error: --watch is not supported with JSON output");
+            return ExitCode::FAILURE;
+        }
+        if interval == 0 {
+            eprintln!("Error: --watch interval must be at least 1 second");
+            return ExitCode::FAILURE;
+        }
+        return watch_loop(interval).await;
+    }
+
     if let Err(e) = run(cli).await {
         match output {
             OutputFormat::Json => {
@@ -84,6 +100,28 @@ async fn main() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+async fn watch_loop(interval_secs: u64) -> ExitCode {
+    let interval = std::time::Duration::from_secs(interval_secs);
+    loop {
+        print!("\x1b[2J\x1b[H");
+        let now = chrono::Local::now().format("%H:%M:%S");
+        println!("Every {interval_secs}s \u{2014} {now}  (Ctrl+C to stop)\n");
+
+        let cli = Cli::parse();
+        if let Err(e) = run(cli).await {
+            eprintln!("Error: {e}");
+        }
+
+        tokio::select! {
+            _ = tokio::time::sleep(interval) => {}
+            _ = tokio::signal::ctrl_c() => {
+                println!();
+                return ExitCode::SUCCESS;
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_lines)]
