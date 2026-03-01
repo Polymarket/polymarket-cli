@@ -41,9 +41,13 @@ pub enum CommentsCommand {
         #[arg(long)]
         order: Option<String>,
 
-        /// Sort ascending instead of descending
-        #[arg(long)]
+        /// Sort ascending
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
     },
 
     /// Get a comment by ID
@@ -69,9 +73,13 @@ pub enum CommentsCommand {
         #[arg(long)]
         order: Option<String>,
 
-        /// Sort ascending instead of descending
-        #[arg(long)]
+        /// Sort ascending
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
     },
 }
 
@@ -105,14 +113,21 @@ pub async fn execute(
             offset,
             order,
             ascending,
+            descending,
         } => {
+            let sort_ascending = match (ascending, descending) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
+
             let request = CommentsRequest::builder()
                 .parent_entity_type(ParentEntityType::from(entity_type))
                 .parent_entity_id(entity_id)
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(sort_ascending)
                 .build();
 
             let comments = client.comments(&request).await?;
@@ -143,14 +158,21 @@ pub async fn execute(
             offset,
             order,
             ascending,
+            descending,
         } => {
+            let sort_ascending = match (ascending, descending) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
+
             let addr = parse_address(&address)?;
             let request = CommentsByUserAddressRequest::builder()
                 .user_address(addr)
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(sort_ascending)
                 .build();
 
             let comments = client.comments_by_user_address(&request).await?;

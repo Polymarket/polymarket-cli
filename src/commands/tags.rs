@@ -30,9 +30,13 @@ pub enum TagsCommand {
         #[arg(long)]
         offset: Option<i32>,
 
-        /// Sort ascending instead of descending
-        #[arg(long)]
+        /// Sort ascending
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
     },
 
     /// Get a single tag by ID or slug
@@ -68,11 +72,18 @@ pub async fn execute(client: &gamma::Client, args: TagsArgs, output: OutputForma
             limit,
             offset,
             ascending,
+            descending,
         } => {
+            let sort_ascending = match (ascending, descending) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
+
             let request = TagsRequest::builder()
                 .limit(limit)
                 .maybe_offset(offset)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(sort_ascending)
                 .build();
 
             let tags = client.tags(&request).await?;

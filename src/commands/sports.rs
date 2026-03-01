@@ -33,9 +33,13 @@ pub enum SportsCommand {
         #[arg(long)]
         order: Option<String>,
 
-        /// Sort ascending instead of descending
-        #[arg(long)]
+        /// Sort ascending
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
 
         /// Filter by league
         #[arg(long)]
@@ -68,13 +72,20 @@ pub async fn execute(client: &gamma::Client, args: SportsArgs, output: OutputFor
             offset,
             order,
             ascending,
+            descending,
             league,
         } => {
+            let sort_ascending = match (ascending, descending) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
+
             let request = TeamsRequest::builder()
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(sort_ascending)
                 .league(league.into_iter().collect::<Vec<_>>())
                 .build();
 

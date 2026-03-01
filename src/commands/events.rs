@@ -40,9 +40,13 @@ pub enum EventsCommand {
         #[arg(long)]
         order: Option<String>,
 
-        /// Sort ascending instead of descending
-        #[arg(long)]
+        /// Sort ascending
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
 
         /// Filter by tag slug (e.g. "politics", "crypto")
         #[arg(long)]
@@ -71,15 +75,21 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
             offset,
             order,
             ascending,
+            descending,
             tag,
         } => {
             let resolved_closed = closed.or_else(|| active.map(|a| !a));
+            let sort_ascending = match (ascending, descending) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
 
             let request = EventsRequest::builder()
                 .limit(limit)
                 .maybe_closed(resolved_closed)
                 .maybe_offset(offset)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(sort_ascending)
                 .maybe_tag_slug(tag)
                 .order(order.into_iter().collect::<Vec<_>>())
                 .build();

@@ -46,9 +46,13 @@ pub enum MarketsCommand {
         #[arg(long)]
         order: Option<String>,
 
-        /// Sort ascending instead of descending
-        #[arg(long)]
+        /// Sort ascending
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
     },
 
     /// Get a single market by ID or slug
@@ -87,15 +91,21 @@ pub async fn execute(
             offset,
             order,
             ascending,
+            descending,
         } => {
             let resolved_closed = closed.or_else(|| active.map(|a| !a));
+            let sort_ascending = match (ascending, descending) {
+                (true, _) => Some(true),
+                (_, true) => Some(false),
+                _ => None,
+            };
 
             let request = MarketsRequest::builder()
                 .limit(limit)
                 .maybe_closed(resolved_closed)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(sort_ascending)
                 .build();
 
             let markets = client.markets(&request).await?;
@@ -155,4 +165,60 @@ pub async fn execute(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use polymarket_client_sdk::gamma::types::request::MarketsRequest;
+    use polymarket_client_sdk::ToQueryParams;
+
+    fn resolve_sort(ascending: bool, descending: bool) -> Option<bool> {
+        match (ascending, descending) {
+            (true, _) => Some(true),
+            (_, true) => Some(false),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn no_flag_omits_ascending_param() {
+        let sort = resolve_sort(false, false);
+        let request = MarketsRequest::builder()
+            .limit(25)
+            .maybe_ascending(sort)
+            .build();
+        let qs = request.query_params(None);
+        assert!(
+            !qs.contains("ascending"),
+            "expected ascending param to be omitted, got: {qs}"
+        );
+    }
+
+    #[test]
+    fn ascending_flag_sends_true() {
+        let sort = resolve_sort(true, false);
+        let request = MarketsRequest::builder()
+            .limit(25)
+            .maybe_ascending(sort)
+            .build();
+        let qs = request.query_params(None);
+        assert!(
+            qs.contains("ascending=true"),
+            "expected ascending=true, got: {qs}"
+        );
+    }
+
+    #[test]
+    fn descending_flag_sends_false() {
+        let sort = resolve_sort(false, true);
+        let request = MarketsRequest::builder()
+            .limit(25)
+            .maybe_ascending(sort)
+            .build();
+        let qs = request.query_params(None);
+        assert!(
+            qs.contains("ascending=false"),
+            "expected ascending=false, got: {qs}"
+        );
+    }
 }
