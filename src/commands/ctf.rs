@@ -1,15 +1,18 @@
-use alloy::primitives::U256;
+use alloy::primitives::{Bytes, U256};
+use alloy::sol;
+use alloy::sol_types::SolCall as _;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
+use polymarket_client_sdk::auth::Signer as _;
 use polymarket_client_sdk::ctf::types::{
     CollectionIdRequest, ConditionIdRequest, MergePositionsRequest, PositionIdRequest,
     RedeemNegRiskRequest, RedeemPositionsRequest, SplitPositionRequest,
 };
 use polymarket_client_sdk::types::{Address, B256};
-use polymarket_client_sdk::{POLYGON, ctf};
+use polymarket_client_sdk::{contract_config, derive_safe_wallet, POLYGON, ctf};
 use rust_decimal::Decimal;
 
-use crate::auth;
+use crate::{auth, config};
 use crate::output::OutputFormat;
 use crate::output::ctf as ctf_output;
 
@@ -183,7 +186,138 @@ fn default_index_sets() -> Vec<U256> {
     vec![U256::from(1), U256::from(2)]
 }
 
-pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&str>) -> Result<()> {
+// Gnosis Safe interface for routing CTF transactions through Safe wallets.
+// When signature_type is "gnosis-safe", outcome tokens are held by the Safe (not the EOA),
+// so CTF calls must go through Safe's execTransaction.
+sol! {
+    #[sol(rpc)]
+    interface IGnosisSafe {
+        function nonce() external view returns (uint256);
+        function getTransactionHash(
+            address to,
+            uint256 value,
+            bytes memory data,
+            uint8 operation,
+            uint256 safeTxGas,
+            uint256 baseGas,
+            uint256 gasPrice,
+            address gasToken,
+            address refundReceiver,
+            uint256 _nonce
+        ) external view returns (bytes32);
+        function execTransaction(
+            address to,
+            uint256 value,
+            bytes calldata data,
+            uint8 operation,
+            uint256 safeTxGas,
+            uint256 baseGas,
+            uint256 gasPrice,
+            address gasToken,
+            address payable refundReceiver,
+            bytes memory signatures
+        ) external payable returns (bool success);
+    }
+
+    // CTF function signatures for encoding calldata (not for RPC calls)
+    interface ICtfEncode {
+        function redeemPositions(
+            address collateralToken,
+            bytes32 parentCollectionId,
+            bytes32 conditionId,
+            uint256[] calldata indexSets
+        );
+        function splitPosition(
+            address collateralToken,
+            bytes32 parentCollectionId,
+            bytes32 conditionId,
+            uint256[] calldata partition,
+            uint256 amount
+        );
+        function mergePositions(
+            address collateralToken,
+            bytes32 parentCollectionId,
+            bytes32 conditionId,
+            uint256[] calldata partition,
+            uint256 amount
+        );
+    }
+
+    // NegRisk adapter function signatures for encoding calldata
+    interface INegRiskEncode {
+        function redeemPositions(
+            bytes32 conditionId,
+            uint256[] calldata amounts
+        );
+    }
+}
+
+/// Execute a transaction through a Gnosis Safe via `execTransaction`.
+///
+/// The EOA signs the Safe transaction hash and submits the outer tx on-chain.
+/// The Safe verifies the signature and calls the target contract internally,
+/// so `msg.sender` in the target is the Safe address (which holds the tokens).
+async fn safe_exec(
+    provider: impl alloy::providers::Provider + Clone,
+    signer: &impl polymarket_client_sdk::auth::Signer,
+    safe_address: Address,
+    target: Address,
+    calldata: Vec<u8>,
+) -> Result<(B256, u64)> {
+    let safe = IGnosisSafe::new(safe_address, provider);
+
+    let nonce = safe.nonce().call().await
+        .context("Failed to get Safe nonce")?;
+
+    let safe_tx_hash = safe.getTransactionHash(
+        target,
+        U256::ZERO,
+        Bytes::from(calldata.clone()),
+        0u8,                // operation: Call
+        U256::ZERO,         // safeTxGas (0 = forward all gas)
+        U256::ZERO,         // baseGas
+        U256::ZERO,         // gasPrice (0 = no refund)
+        Address::ZERO,      // gasToken
+        Address::ZERO,      // refundReceiver
+        nonce,
+    ).call().await
+        .context("Failed to compute Safe transaction hash")?;
+
+    let signature = signer.sign_hash(&safe_tx_hash).await
+        .map_err(|e| anyhow::anyhow!("Failed to sign Safe transaction: {e}"))?;
+    let sig_bytes = signature.as_bytes();
+
+    let pending = safe.execTransaction(
+        target,
+        U256::ZERO,
+        Bytes::from(calldata),
+        0u8,
+        U256::ZERO,
+        U256::ZERO,
+        U256::ZERO,
+        Address::ZERO,
+        Address::ZERO,
+        Bytes::from(sig_bytes.to_vec()),
+    ).send().await
+        .context("Failed to send Safe transaction")?;
+
+    let tx_hash = *pending.tx_hash();
+    let receipt = pending.get_receipt().await
+        .context("Failed to get Safe transaction receipt")?;
+
+    let block = receipt.block_number
+        .context("Block number not in receipt")?;
+
+    Ok((tx_hash, block))
+}
+
+pub async fn execute(
+    args: CtfArgs,
+    output: OutputFormat,
+    private_key: Option<&str>,
+    signature_type: Option<&str>,
+) -> Result<()> {
+    let is_gnosis_safe = config::resolve_signature_type(signature_type) == "gnosis-safe";
     match args.command {
         CtfCommand::Split {
             condition,
@@ -201,23 +335,43 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
                 None => default_partition(),
             };
 
-            let provider = auth::create_provider(private_key).await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
+            if is_gnosis_safe {
+                let signer = auth::resolve_signer(private_key)?;
+                let safe_addr = derive_safe_wallet(signer.address(), POLYGON)
+                    .context("Safe wallet derivation not supported on this chain")?;
+                let provider = auth::create_provider(private_key).await?;
+                let ctf_addr = contract_config(POLYGON, false)
+                    .context("CTF config not found")?.conditional_tokens;
 
-            let req = SplitPositionRequest::builder()
-                .collateral_token(collateral_addr)
-                .parent_collection_id(parent)
-                .condition_id(condition_id)
-                .partition(partition)
-                .amount(usdc_amount)
-                .build();
+                let calldata = ICtfEncode::splitPositionCall {
+                    collateralToken: collateral_addr,
+                    parentCollectionId: parent,
+                    conditionId: condition_id,
+                    partition,
+                    amount: usdc_amount,
+                }.abi_encode();
 
-            let resp = client
-                .split_position(&req)
-                .await
-                .context("Split position failed")?;
+                let (tx_hash, block) = safe_exec(provider, &signer, safe_addr, ctf_addr, calldata).await?;
+                ctf_output::print_tx_result("split", tx_hash, block, &output)
+            } else {
+                let provider = auth::create_provider(private_key).await?;
+                let client = ctf::Client::new(provider, POLYGON)?;
 
-            ctf_output::print_tx_result("split", resp.transaction_hash, resp.block_number, &output)
+                let req = SplitPositionRequest::builder()
+                    .collateral_token(collateral_addr)
+                    .parent_collection_id(parent)
+                    .condition_id(condition_id)
+                    .partition(partition)
+                    .amount(usdc_amount)
+                    .build();
+
+                let resp = client
+                    .split_position(&req)
+                    .await
+                    .context("Split position failed")?;
+
+                ctf_output::print_tx_result("split", resp.transaction_hash, resp.block_number, &output)
+            }
         }
         CtfCommand::Merge {
             condition,
@@ -235,23 +389,43 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
                 None => default_partition(),
             };
 
-            let provider = auth::create_provider(private_key).await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
+            if is_gnosis_safe {
+                let signer = auth::resolve_signer(private_key)?;
+                let safe_addr = derive_safe_wallet(signer.address(), POLYGON)
+                    .context("Safe wallet derivation not supported on this chain")?;
+                let provider = auth::create_provider(private_key).await?;
+                let ctf_addr = contract_config(POLYGON, false)
+                    .context("CTF config not found")?.conditional_tokens;
 
-            let req = MergePositionsRequest::builder()
-                .collateral_token(collateral_addr)
-                .parent_collection_id(parent)
-                .condition_id(condition_id)
-                .partition(partition)
-                .amount(usdc_amount)
-                .build();
+                let calldata = ICtfEncode::mergePositionsCall {
+                    collateralToken: collateral_addr,
+                    parentCollectionId: parent,
+                    conditionId: condition_id,
+                    partition,
+                    amount: usdc_amount,
+                }.abi_encode();
 
-            let resp = client
-                .merge_positions(&req)
-                .await
-                .context("Merge positions failed")?;
+                let (tx_hash, block) = safe_exec(provider, &signer, safe_addr, ctf_addr, calldata).await?;
+                ctf_output::print_tx_result("merge", tx_hash, block, &output)
+            } else {
+                let provider = auth::create_provider(private_key).await?;
+                let client = ctf::Client::new(provider, POLYGON)?;
 
-            ctf_output::print_tx_result("merge", resp.transaction_hash, resp.block_number, &output)
+                let req = MergePositionsRequest::builder()
+                    .collateral_token(collateral_addr)
+                    .parent_collection_id(parent)
+                    .condition_id(condition_id)
+                    .partition(partition)
+                    .amount(usdc_amount)
+                    .build();
+
+                let resp = client
+                    .merge_positions(&req)
+                    .await
+                    .context("Merge positions failed")?;
+
+                ctf_output::print_tx_result("merge", resp.transaction_hash, resp.block_number, &output)
+            }
         }
         CtfCommand::Redeem {
             condition,
@@ -267,46 +441,84 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
                 None => default_index_sets(),
             };
 
-            let provider = auth::create_provider(private_key).await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
+            if is_gnosis_safe {
+                let signer = auth::resolve_signer(private_key)?;
+                let safe_addr = derive_safe_wallet(signer.address(), POLYGON)
+                    .context("Safe wallet derivation not supported on this chain")?;
+                let provider = auth::create_provider(private_key).await?;
+                let ctf_addr = contract_config(POLYGON, false)
+                    .context("CTF config not found")?.conditional_tokens;
 
-            let req = RedeemPositionsRequest::builder()
-                .collateral_token(collateral_addr)
-                .parent_collection_id(parent)
-                .condition_id(condition_id)
-                .index_sets(index_sets)
-                .build();
+                let calldata = ICtfEncode::redeemPositionsCall {
+                    collateralToken: collateral_addr,
+                    parentCollectionId: parent,
+                    conditionId: condition_id,
+                    indexSets: index_sets,
+                }.abi_encode();
 
-            let resp = client
-                .redeem_positions(&req)
-                .await
-                .context("Redeem positions failed")?;
+                let (tx_hash, block) = safe_exec(provider, &signer, safe_addr, ctf_addr, calldata).await?;
+                ctf_output::print_tx_result("redeem", tx_hash, block, &output)
+            } else {
+                let provider = auth::create_provider(private_key).await?;
+                let client = ctf::Client::new(provider, POLYGON)?;
 
-            ctf_output::print_tx_result("redeem", resp.transaction_hash, resp.block_number, &output)
+                let req = RedeemPositionsRequest::builder()
+                    .collateral_token(collateral_addr)
+                    .parent_collection_id(parent)
+                    .condition_id(condition_id)
+                    .index_sets(index_sets)
+                    .build();
+
+                let resp = client
+                    .redeem_positions(&req)
+                    .await
+                    .context("Redeem positions failed")?;
+
+                ctf_output::print_tx_result("redeem", resp.transaction_hash, resp.block_number, &output)
+            }
         }
         CtfCommand::RedeemNegRisk { condition, amounts } => {
             let condition_id = super::parse_condition_id(&condition)?;
             let amounts = parse_usdc_amounts(&amounts)?;
 
-            let provider = auth::create_provider(private_key).await?;
-            let client = ctf::Client::with_neg_risk(provider, POLYGON)?;
+            if is_gnosis_safe {
+                let signer = auth::resolve_signer(private_key)?;
+                let safe_addr = derive_safe_wallet(signer.address(), POLYGON)
+                    .context("Safe wallet derivation not supported on this chain")?;
+                let provider = auth::create_provider(private_key).await?;
+                let neg_risk_addr = contract_config(POLYGON, true)
+                    .context("NegRisk config not found")?
+                    .neg_risk_adapter
+                    .context("NegRisk adapter address not configured")?;
 
-            let req = RedeemNegRiskRequest::builder()
-                .condition_id(condition_id)
-                .amounts(amounts)
-                .build();
+                let calldata = INegRiskEncode::redeemPositionsCall {
+                    conditionId: condition_id,
+                    amounts,
+                }.abi_encode();
 
-            let resp = client
-                .redeem_neg_risk(&req)
-                .await
-                .context("Redeem neg-risk positions failed")?;
+                let (tx_hash, block) = safe_exec(provider, &signer, safe_addr, neg_risk_addr, calldata).await?;
+                ctf_output::print_tx_result("redeem-neg-risk", tx_hash, block, &output)
+            } else {
+                let provider = auth::create_provider(private_key).await?;
+                let client = ctf::Client::with_neg_risk(provider, POLYGON)?;
 
-            ctf_output::print_tx_result(
-                "redeem-neg-risk",
-                resp.transaction_hash,
-                resp.block_number,
-                &output,
-            )
+                let req = RedeemNegRiskRequest::builder()
+                    .condition_id(condition_id)
+                    .amounts(amounts)
+                    .build();
+
+                let resp = client
+                    .redeem_neg_risk(&req)
+                    .await
+                    .context("Redeem neg-risk positions failed")?;
+
+                ctf_output::print_tx_result(
+                    "redeem-neg-risk",
+                    resp.transaction_hash,
+                    resp.block_number,
+                    &output,
+                )
+            }
         }
         CtfCommand::ConditionId {
             oracle,

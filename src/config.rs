@@ -13,10 +13,13 @@ pub const NO_WALLET_MSG: &str =
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
-    pub private_key: String,
+    #[serde(default)]
+    pub private_key: Option<String>,
     pub chain_id: u64,
     #[serde(default = "default_signature_type")]
     pub signature_type: String,
+    #[serde(default)]
+    pub proxy: Option<String>,
 }
 
 fn default_signature_type() -> String {
@@ -84,6 +87,23 @@ pub fn resolve_signature_type(cli_flag: Option<&str>) -> String {
     DEFAULT_SIGNATURE_TYPE.to_string()
 }
 
+const PROXY_ENV_VAR: &str = "POLYMARKET_PROXY";
+
+/// Resolve SOCKS/HTTP proxy URL.
+///
+/// Priority: `POLYMARKET_PROXY` env var > config file `proxy` field > `None`.
+/// When a proxy URL is returned the caller should set `ALL_PROXY` so that
+/// every reqwest client (including those inside the SDK) picks it up via
+/// the built-in `system-proxy` feature.
+pub fn resolve_proxy() -> Option<String> {
+    if let Ok(url) = std::env::var(PROXY_ENV_VAR)
+        && !url.is_empty()
+    {
+        return Some(url);
+    }
+    load_config().and_then(|c| c.proxy)
+}
+
 pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()> {
     let dir = config_dir()?;
     fs::create_dir_all(&dir).context("Failed to create config directory")?;
@@ -94,10 +114,12 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
     }
 
+    let existing_proxy = load_config().and_then(|c| c.proxy);
     let config = Config {
-        private_key: key.to_string(),
+        private_key: Some(key.to_string()),
         chain_id,
         signature_type: signature_type.to_string(),
+        proxy: existing_proxy,
     };
     let json = serde_json::to_string_pretty(&config)?;
     let path = config_path()?;
@@ -135,8 +157,11 @@ pub fn resolve_key(cli_flag: Option<&str>) -> (Option<String>, KeySource) {
     {
         return (Some(key), KeySource::EnvVar);
     }
-    if let Some(config) = load_config() {
-        return (Some(config.private_key), KeySource::ConfigFile);
+    if let Some(config) = load_config()
+        && let Some(key) = config.private_key
+        && !key.is_empty()
+    {
+        return (Some(key), KeySource::ConfigFile);
     }
     (None, KeySource::None)
 }
