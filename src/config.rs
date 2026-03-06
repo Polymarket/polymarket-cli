@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
 const SIG_TYPE_ENV_VAR: &str = "POLYMARKET_SIGNATURE_TYPE";
 pub const DEFAULT_SIGNATURE_TYPE: &str = "proxy";
+const SOLANA_KEY_ENV_VAR: &str = "METENGINE_SOLANA_KEY";
 
 pub const NO_WALLET_MSG: &str =
     "No wallet configured. Run `polymarket wallet create` or `polymarket wallet import <key>`";
@@ -17,6 +18,8 @@ pub struct Config {
     pub chain_id: u64,
     #[serde(default = "default_signature_type")]
     pub signature_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub solana_private_key: Option<String>,
 }
 
 fn default_signature_type() -> String {
@@ -98,6 +101,7 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
         private_key: key.to_string(),
         chain_id,
         signature_type: signature_type.to_string(),
+        solana_private_key: None,
     };
     let json = serde_json::to_string_pretty(&config)?;
     let path = config_path()?;
@@ -123,6 +127,24 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
     }
 
     Ok(())
+}
+
+/// Priority: CLI flag > env var > config file.
+pub fn resolve_solana_key(cli_flag: Option<&str>) -> (Option<String>, KeySource) {
+    if let Some(key) = cli_flag {
+        return (Some(key.to_string()), KeySource::Flag);
+    }
+    if let Ok(key) = std::env::var(SOLANA_KEY_ENV_VAR)
+        && !key.is_empty()
+    {
+        return (Some(key), KeySource::EnvVar);
+    }
+    if let Some(config) = load_config()
+        && let Some(key) = config.solana_private_key
+    {
+        return (Some(key), KeySource::ConfigFile);
+    }
+    (None, KeySource::None)
 }
 
 /// Priority: CLI flag > env var > config file.

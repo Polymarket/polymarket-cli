@@ -1,6 +1,7 @@
 mod auth;
 mod commands;
 mod config;
+mod metengine;
 mod output;
 mod shell;
 
@@ -26,6 +27,10 @@ pub(crate) struct Cli {
     /// Signature type: eoa, proxy, or gnosis-safe
     #[arg(long, global = true)]
     signature_type: Option<String>,
+
+    /// Solana private key for MetEngine x402 payments (overrides env var and config file)
+    #[arg(long, global = true)]
+    solana_key: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -60,6 +65,8 @@ enum Commands {
     Bridge(commands::bridge::BridgeArgs),
     /// Manage wallet and authentication
     Wallet(commands::wallet::WalletArgs),
+    /// MetEngine smart money analytics (x402-paid)
+    Metengine(commands::metengine::MetengineArgs),
     /// Check API health status
     Status,
     /// Update to the latest version
@@ -183,6 +190,9 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Commands::Wallet(args) => {
             commands::wallet::execute(args, &cli.output, cli.private_key.as_deref())
+        }
+        Commands::Metengine(args) => {
+            commands::metengine::execute(args, cli.output, cli.solana_key.as_deref()).await
         }
         Commands::Upgrade => commands::upgrade::execute(),
         Commands::Status => {
