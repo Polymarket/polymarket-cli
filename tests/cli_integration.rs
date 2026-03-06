@@ -67,7 +67,26 @@ fn events_help_lists_subcommands() {
                 .and(predicate::str::contains("tags")),
         );
 }
+#[test]
+fn data_activity_help_shows_subcommand() {
+    polymarket()
+        .args(["data", "activity", "--help"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("address")
+                .and(predicate::str::contains("limit"))
+                .and(predicate::str::contains("offset")),
+        );
+}
 
+#[test]
+fn data_activity_requires_address() {
+    polymarket()
+        .args(["data", "activity"])
+        .assert()
+        .failure();
+}
 #[test]
 fn wallet_help_lists_subcommands() {
     polymarket()
