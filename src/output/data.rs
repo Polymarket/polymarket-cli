@@ -248,6 +248,12 @@ pub fn print_trades(trades: &[Trade], output: &OutputFormat) -> anyhow::Result<(
     Ok(())
 }
 
+/// Renders on-chain activity records to the configured output format.
+///
+/// In JSON mode, all fields from the [`Activity`] struct are included —
+/// notably `side`, `price`, `outcome`, `outcome_index`, `condition_id`,
+/// `slug`, and `asset` which are required to distinguish buy/sell trades
+/// and identify the market and outcome for non-CLOB activity records.
 pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::Result<()> {
     match output {
         OutputFormat::Table => {
@@ -304,7 +310,7 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
                         "proxy_wallet": a.proxy_wallet.to_string(),
                         "side": a.side.as_ref().map(|s| s.to_string()),
                         "price": a.price.as_ref().map(|p| p.to_string()),
-                        "asset": a.asset.as_ref().map(|a| a.to_string()),
+                        "asset": a.asset.as_ref().map(|asset| asset.to_string()),
                         "outcome": a.outcome,
                         "outcome_index": a.outcome_index,
                         "condition_id": a.condition_id.as_ref().map(|c| c.to_string()),
