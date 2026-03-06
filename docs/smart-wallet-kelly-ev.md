@@ -253,7 +253,7 @@ This shows you what the *worst* traders on the platform are doing. Low scores. B
 Now make sure the smart money is actually *doing something*, not just sitting:
 
 ```bash
-polymarket metengine whale-trades --market will-fed-cut-rates-march-2026 --smart-money-only --min-usdc 5000 --timeframe 7d
+polymarket metengine whale-trades --market will-fed-cut-rates-march-2026 --smart-money-only --min-usdc 5000 --timeframe 48h
 ```
 
 An 80% consensus from last week is interesting. An 80% consensus where whales are *still adding* in the last 48 hours? That's actionable.

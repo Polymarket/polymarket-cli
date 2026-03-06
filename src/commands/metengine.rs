@@ -287,7 +287,7 @@ pub enum MetengineCommand {
         /// Minimum USDC size
         #[arg(long, default_value = "10000")]
         min_usdc: f64,
-        /// Time window: 1h, 4h, 12h, 24h, 7d, 30d
+        /// Time window: 1h, 4h, 12h, 24h, 48h, 7d, 30d
         #[arg(long, default_value = "24h")]
         timeframe: String,
         /// Filter by market condition ID (0x...), slug, or Polymarket URL
