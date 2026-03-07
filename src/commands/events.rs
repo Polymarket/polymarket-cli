@@ -79,7 +79,7 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
                 .limit(limit)
                 .maybe_closed(resolved_closed)
                 .maybe_offset(offset)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(Some(ascending))
                 .maybe_tag_slug(tag)
                 .order(order.into_iter().collect::<Vec<_>>())
                 .build();
