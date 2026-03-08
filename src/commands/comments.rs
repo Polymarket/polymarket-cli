@@ -112,7 +112,7 @@ pub async fn execute(
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(Some(ascending))
                 .build();
 
             let comments = client.comments(&request).await?;
@@ -150,7 +150,7 @@ pub async fn execute(
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(Some(ascending))
                 .build();
 
             let comments = client.comments_by_user_address(&request).await?;

@@ -72,7 +72,7 @@ pub async fn execute(client: &gamma::Client, args: TagsArgs, output: OutputForma
             let request = TagsRequest::builder()
                 .limit(limit)
                 .maybe_offset(offset)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .maybe_ascending(Some(ascending))
                 .build();
 
             let tags = client.tags(&request).await?;
