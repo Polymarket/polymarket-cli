@@ -43,13 +43,13 @@ fn print_table_line(event: &WsEvent) {
                 .and_then(Value::as_array)
                 .and_then(|a| a.first())
                 .and_then(|l| l.get("price"))
-                .map_or_else(|| "-".into(), |v| v.to_string());
+                .map_or_else(|| "-".into(), |v| v.as_str().unwrap_or("-").to_string());
             let best_ask = p
                 .get("asks")
                 .and_then(Value::as_array)
                 .and_then(|a| a.first())
                 .and_then(|l| l.get("price"))
-                .map_or_else(|| "-".into(), |v| v.to_string());
+                .map_or_else(|| "-".into(), |v| v.as_str().unwrap_or("-").to_string());
             println!("BOOK  | Asset: {asset} | Bid: {best_bid:<6} | Ask: {best_ask:<6} | Levels: {bids}/{asks}");
         }
         "price_change" => {
