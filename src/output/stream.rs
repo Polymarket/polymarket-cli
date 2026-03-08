@@ -11,8 +11,17 @@ use crate::ws::WsEvent;
 pub fn print_event(event: &WsEvent, output: &OutputFormat) -> Result<()> {
     match output {
         OutputFormat::Json => {
-            // Emit the raw payload as a single-line JSON object (NDJSON).
-            println!("{}", serde_json::to_string(&event.payload)?);
+            // The `event_type` field is consumed by serde into the struct
+            // and excluded from the flattened `payload` Value.  Re-inject it
+            // so every NDJSON line is self-describing for downstream consumers.
+            let mut obj = event.payload.clone();
+            if let Some(map) = obj.as_object_mut() {
+                map.insert(
+                    "event_type".to_string(),
+                    serde_json::Value::String(event.event_type.clone()),
+                );
+            }
+            println!("{}", serde_json::to_string(&obj)?);
         }
         OutputFormat::Table => {
             print_table_line(event);

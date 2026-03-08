@@ -83,12 +83,13 @@ pub async fn execute(args: StreamArgs, output: OutputFormat) -> Result<()> {
                     continue;
                 }
 
-                stream_output::print_event(&event, &output)?;
-
-                count += 1;
+                // Check event limit before printing
                 if max.is_some_and(|m| count >= m) {
                     break;
                 }
+
+                stream_output::print_event(&event, &output)?;
+                count += 1;
             }
 
             else => break, // stream ended
