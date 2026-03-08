@@ -81,55 +81,51 @@ pub async fn subscribe_market(
     let payload = serde_json::to_string(&request)?;
     sink.send(Message::Text(payload.into())).await?;
 
-    // Map incoming frames → WsEvent(s)
-    Ok(stream.filter_map(move |frame_result| async move {
-        let frame = match frame_result {
-            Ok(f) => f,
-            Err(e) => return Some(Err(anyhow!("WebSocket error: {e}"))),
-        };
-
-        let text = match &frame {
-            Message::Text(t) => t.as_ref(),
-            Message::Binary(b) => {
-                return match str::from_utf8(b) {
+    // Map incoming frames → WsEvent(s), flattening arrays into individual items
+    Ok(stream.flat_map(move |frame_result| {
+        let events: Vec<Result<WsEvent>> = match frame_result {
+            Err(e) => vec![Err(anyhow!("WebSocket error: {e}"))],
+            Ok(frame) => match &frame {
+                Message::Text(t) => parse_events(t.as_ref()),
+                Message::Binary(b) => match str::from_utf8(b) {
                     Ok(s) => parse_events(s),
-                    Err(_) => None,
-                }
-            }
-            Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => return None,
-            Message::Close(_) => return Some(Err(anyhow!("WebSocket closed by server"))),
+                    Err(_) => vec![],
+                },
+                Message::Close(_) => vec![Err(anyhow!("WebSocket closed by server"))],
+                _ => vec![],
+            },
         };
-
-        parse_events(text)
+        futures_util::stream::iter(events)
     }))
 }
 
-/// Parse a JSON text frame into a single `WsEvent` result.
+/// Parse a JSON text frame into zero or more [`WsEvent`] results.
 ///
-/// The server may send single objects or arrays — we handle both.
-fn parse_events(text: &str) -> Option<Result<WsEvent>> {
+/// The server may send single objects or arrays — we handle both and
+/// return **all** events so that array frames are never silently truncated.
+fn parse_events(text: &str) -> Vec<Result<WsEvent>> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
-        return None;
+        return vec![];
     }
 
     // Single object
     if trimmed.starts_with('{') {
         return match serde_json::from_str::<WsEvent>(trimmed) {
-            Ok(event) => Some(Ok(event)),
-            Err(e) => Some(Err(anyhow!("Failed to parse WS message: {e}"))),
+            Ok(event) => vec![Ok(event)],
+            Err(e) => vec![Err(anyhow!("Failed to parse WS message: {e}"))],
         };
     }
 
-    // Array — yield the first parseable event (the stream adapter is per-frame)
+    // Array — yield every event in the array
     if trimmed.starts_with('[') {
         return match serde_json::from_str::<Vec<WsEvent>>(trimmed) {
-            Ok(events) => events.into_iter().next().map(Ok),
-            Err(e) => Some(Err(anyhow!("Failed to parse WS array message: {e}"))),
+            Ok(events) => events.into_iter().map(Ok).collect(),
+            Err(e) => vec![Err(anyhow!("Failed to parse WS array message: {e}"))],
         };
     }
 
-    None
+    vec![]
 }
 
 #[cfg(test)]
@@ -139,25 +135,41 @@ mod tests {
     #[test]
     fn parse_single_event() {
         let json = r#"{"event_type":"book","asset_id":"123","market":"0x01","timestamp":"1234567890","bids":[],"asks":[]}"#;
-        let result = parse_events(json);
-        assert!(result.is_some());
-        let event = result.unwrap().unwrap();
+        let results = parse_events(json);
+        assert_eq!(results.len(), 1);
+        let event = results.into_iter().next().unwrap().unwrap();
         assert_eq!(event.event_type, "book");
     }
 
     #[test]
-    fn parse_array_events() {
+    fn parse_array_single_event() {
         let json = r#"[{"event_type":"price_change","market":"0x01","timestamp":"123","price_changes":[]}]"#;
-        let result = parse_events(json);
-        assert!(result.is_some());
-        let event = result.unwrap().unwrap();
+        let results = parse_events(json);
+        assert_eq!(results.len(), 1);
+        let event = results.into_iter().next().unwrap().unwrap();
         assert_eq!(event.event_type, "price_change");
     }
 
     #[test]
-    fn parse_empty_returns_none() {
-        assert!(parse_events("").is_none());
-        assert!(parse_events("  ").is_none());
+    fn parse_array_yields_all_events() {
+        let json = r#"[
+            {"event_type":"price_change","market":"0x01","timestamp":"1","price_changes":[]},
+            {"event_type":"book","market":"0x02","timestamp":"2","bids":[],"asks":[]},
+            {"event_type":"midpoint","market":"0x03","timestamp":"3","midpoint":"0.5"}
+        ]"#;
+        let results = parse_events(json);
+        assert_eq!(results.len(), 3, "All events in the array must be yielded");
+        let types: Vec<String> = results
+            .into_iter()
+            .map(|r| r.unwrap().event_type)
+            .collect();
+        assert_eq!(types, vec!["price_change", "book", "midpoint"]);
+    }
+
+    #[test]
+    fn parse_empty_returns_empty_vec() {
+        assert!(parse_events("").is_empty());
+        assert!(parse_events("  ").is_empty());
     }
 
     #[test]
@@ -174,21 +186,19 @@ mod tests {
     #[test]
     fn parse_malformed_array_returns_error() {
         let json = r#"[{"not_an_event": true}]"#;
-        let result = parse_events(json);
-        assert!(result.is_some());
-        assert!(result.unwrap().is_err());
+        let results = parse_events(json);
+        assert_eq!(results.len(), 1);
+        assert!(results.into_iter().next().unwrap().is_err());
     }
 
     #[test]
-    fn parse_non_json_text_returns_none() {
-        assert!(parse_events("hello world").is_none());
+    fn parse_non_json_text_returns_empty() {
+        assert!(parse_events("hello world").is_empty());
     }
 
     #[test]
-    fn parse_empty_array_returns_none() {
-        let result = parse_events("[]");
-        assert!(result.is_some_and(|r| r.is_ok()) == false);
-        // Empty array parses fine but has no elements → None from .next()
-        assert!(parse_events("[]").is_none());
+    fn parse_empty_array_returns_empty() {
+        let results = parse_events("[]");
+        assert!(results.is_empty());
     }
 }

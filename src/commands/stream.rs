@@ -3,9 +3,6 @@
 //! Uses a native WebSocket connection (via `tokio-tungstenite`) to the
 //! Polymarket CLOB WebSocket API. No third-party SDK integration.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-
 use anyhow::{Context as _, Result};
 use clap::{Args, Subcommand};
 use futures_util::StreamExt as _;
@@ -48,17 +45,6 @@ pub enum StreamCommand {
     },
 }
 
-/// Create a shutdown signal tied to Ctrl+C.
-fn shutdown_flag() -> Arc<AtomicBool> {
-    let flag = Arc::new(AtomicBool::new(false));
-    let f = Arc::clone(&flag);
-    ctrlc::set_handler(move || {
-        f.store(true, Ordering::SeqCst);
-    })
-    .expect("failed to register Ctrl+C handler");
-    flag
-}
-
 fn split_ids(csv: &str) -> Vec<String> {
     csv.split(',')
         .map(|s| s.trim().to_string())
@@ -67,7 +53,6 @@ fn split_ids(csv: &str) -> Vec<String> {
 }
 
 pub async fn execute(args: StreamArgs, output: OutputFormat) -> Result<()> {
-    let shutdown = shutdown_flag();
     let max = args.max_events;
 
     let (asset_ids, filter) = match &args.command {
@@ -82,23 +67,31 @@ pub async fn execute(args: StreamArgs, output: OutputFormat) -> Result<()> {
     let mut stream = Box::pin(ws::subscribe_market(&asset_ids).await?);
 
     let mut count: u64 = 0;
-    while let Some(result) = stream.next().await {
-        if shutdown.load(Ordering::SeqCst) {
-            break;
-        }
+    loop {
+        tokio::select! {
+            biased;
 
-        let event = result.context("WebSocket stream error")?;
+            _ = tokio::signal::ctrl_c() => {
+                break;
+            }
 
-        // Filter to the requested event type
-        if event.event_type != filter {
-            continue;
-        }
+            Some(result) = stream.next() => {
+                let event = result.context("WebSocket stream error")?;
 
-        stream_output::print_event(&event, &output)?;
+                // Filter to the requested event type
+                if event.event_type != filter {
+                    continue;
+                }
 
-        count += 1;
-        if max.is_some_and(|m| count >= m) {
-            break;
+                stream_output::print_event(&event, &output)?;
+
+                count += 1;
+                if max.is_some_and(|m| count >= m) {
+                    break;
+                }
+            }
+
+            else => break, // stream ended
         }
     }
 
