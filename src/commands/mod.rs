@@ -12,6 +12,7 @@ pub mod profiles;
 pub mod series;
 pub mod setup;
 pub mod sports;
+pub mod stream;
 pub mod tags;
 pub mod upgrade;
 pub mod wallet;

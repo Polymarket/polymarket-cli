@@ -28,6 +28,7 @@ fn help_lists_all_top_level_commands() {
             .and(predicate::str::contains("data"))
             .and(predicate::str::contains("bridge"))
             .and(predicate::str::contains("wallet"))
+            .and(predicate::str::contains("stream"))
             .and(predicate::str::contains("status")),
     );
 }
@@ -485,4 +486,59 @@ fn wallet_address_succeeds_or_fails_gracefully() {
     let output = polymarket().args(["wallet", "address"]).output().unwrap();
     // Either succeeds or fails with an error message — not a panic
     assert!(output.status.success() || !output.stderr.is_empty());
+}
+
+#[test]
+fn stream_help_lists_subcommands() {
+    polymarket()
+        .args(["stream", "--help"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("orderbook")
+                .and(predicate::str::contains("prices"))
+                .and(predicate::str::contains("last-trade"))
+                .and(predicate::str::contains("midpoints")),
+        );
+}
+
+#[test]
+fn stream_orderbook_requires_token_ids() {
+    polymarket()
+        .args(["stream", "orderbook"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn stream_prices_requires_token_ids() {
+    polymarket()
+        .args(["stream", "prices"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn stream_last_trade_requires_token_ids() {
+    polymarket()
+        .args(["stream", "last-trade"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn stream_midpoints_requires_token_ids() {
+    polymarket()
+        .args(["stream", "midpoints"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn stream_max_events_flag_appears_in_help() {
+    polymarket()
+        .args(["stream", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--max-events"));
 }

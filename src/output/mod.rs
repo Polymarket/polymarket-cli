@@ -9,6 +9,7 @@ pub mod markets;
 pub mod profiles;
 pub mod series;
 pub mod sports;
+pub mod stream;
 pub mod tags;
 
 use polymarket_client_sdk::types::Decimal;
