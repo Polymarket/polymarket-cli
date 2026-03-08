@@ -103,26 +103,47 @@ pub async fn subscribe_market(
 ///
 /// The server may send single objects or arrays — we handle both and
 /// return **all** events so that array frames are never silently truncated.
+///
+/// Non-event messages (subscription confirmations, heartbeats, error
+/// responses) that lack `event_type` are silently skipped instead of
+/// returning errors, which would otherwise crash the stream via `?`.
 fn parse_events(text: &str) -> Vec<Result<WsEvent>> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return vec![];
     }
 
-    // Single object
+    // Single object — skip gracefully if it lacks `event_type`
     if trimmed.starts_with('{') {
-        return match serde_json::from_str::<WsEvent>(trimmed) {
+        // Quick pre-check: only attempt WsEvent parsing when the key exists.
+        let obj: serde_json::Value = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(e) => return vec![Err(anyhow!("Failed to parse WS JSON: {e}"))],
+        };
+        if !obj.get("event_type").is_some_and(|v| v.is_string()) {
+            // Not an event (e.g. subscription ack, heartbeat) — skip.
+            return vec![];
+        }
+        return match serde_json::from_value::<WsEvent>(obj) {
             Ok(event) => vec![Ok(event)],
-            Err(e) => vec![Err(anyhow!("Failed to parse WS message: {e}"))],
+            Err(e) => vec![Err(anyhow!("Failed to parse WS event: {e}"))],
         };
     }
 
-    // Array — yield every event in the array
+    // Array — yield only elements that carry `event_type`
     if trimmed.starts_with('[') {
-        return match serde_json::from_str::<Vec<WsEvent>>(trimmed) {
-            Ok(events) => events.into_iter().map(Ok).collect(),
-            Err(e) => vec![Err(anyhow!("Failed to parse WS array message: {e}"))],
+        let arr: Vec<serde_json::Value> = match serde_json::from_str(trimmed) {
+            Ok(v) => v,
+            Err(e) => return vec![Err(anyhow!("Failed to parse WS array: {e}"))],
         };
+        return arr
+            .into_iter()
+            .filter(|v| v.get("event_type").is_some_and(|et| et.is_string()))
+            .map(|v| {
+                serde_json::from_value::<WsEvent>(v)
+                    .map_err(|e| anyhow!("Failed to parse WS event in array: {e}"))
+            })
+            .collect();
     }
 
     vec![]
@@ -184,11 +205,23 @@ mod tests {
     }
 
     #[test]
-    fn parse_malformed_array_returns_error() {
-        let json = r#"[{"not_an_event": true}]"#;
+    fn parse_non_event_object_is_skipped() {
+        // Subscription confirmations, heartbeats, etc. lack `event_type`
+        let json = r#"{"type":"subscription","channel":"market","status":"ok"}"#;
+        assert!(parse_events(json).is_empty());
+    }
+
+    #[test]
+    fn parse_array_skips_non_event_elements() {
+        // Array with a mix of events and non-events
+        let json = r#"[
+            {"type":"heartbeat","timestamp":"123"},
+            {"event_type":"book","market":"0x01","timestamp":"2","bids":[],"asks":[]},
+            {"status":"ok"}
+        ]"#;
         let results = parse_events(json);
-        assert_eq!(results.len(), 1);
-        assert!(results.into_iter().next().unwrap().is_err());
+        assert_eq!(results.len(), 1, "Only the element with event_type should be yielded");
+        assert_eq!(results[0].as_ref().unwrap().event_type, "book");
     }
 
     #[test]
