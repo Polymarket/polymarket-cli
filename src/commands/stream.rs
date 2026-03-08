@@ -75,24 +75,25 @@ pub async fn execute(args: StreamArgs, output: OutputFormat) -> Result<()> {
                 break;
             }
 
-            Some(result) = stream.next() => {
-                let event = result.context("WebSocket stream error")?;
+            frame = stream.next() => match frame {
+                Some(result) => {
+                    let event = result.context("WebSocket stream error")?;
 
-                // Filter to the requested event type
-                if event.event_type != filter {
-                    continue;
+                    // Filter to the requested event type
+                    if event.event_type != filter {
+                        continue;
+                    }
+
+                    // Check event limit before printing
+                    if max.is_some_and(|m| count >= m) {
+                        break;
+                    }
+
+                    stream_output::print_event(&event, &output)?;
+                    count += 1;
                 }
-
-                // Check event limit before printing
-                if max.is_some_and(|m| count >= m) {
-                    break;
-                }
-
-                stream_output::print_event(&event, &output)?;
-                count += 1;
+                None => break, // stream ended
             }
-
-            else => break, // stream ended
         }
     }
 
