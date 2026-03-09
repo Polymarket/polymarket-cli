@@ -3738,6 +3738,8 @@ dependencies = [
 [[package]]
 name = "polymarket-client-sdk"
 version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0e3524434cec7736e9a6a973da143e5961b133164b98c83939c8ee1bebe4a82"
 dependencies = [
  "alloy",
  "async-stream",

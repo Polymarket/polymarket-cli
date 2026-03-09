@@ -14,7 +14,7 @@ name = "polymarket"
 path = "src/main.rs"
 
 [dependencies]
-polymarket-client-sdk = { path = "../polymarket-client-sdk", features = ["gamma", "data", "bridge", "clob", "ctf"] }
+polymarket-client-sdk = { version = "0.4", features = ["gamma", "data", "bridge", "clob", "ctf"] }
 alloy = { version = "1.6.3", default-features = false, features = ["eip712", "providers", "sol-types", "contract", "reqwest", "reqwest-rustls-tls", "signer-local", "signers"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
