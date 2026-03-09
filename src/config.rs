@@ -9,14 +9,29 @@ const SIG_TYPE_ENV_VAR: &str = "POLYMARKET_SIGNATURE_TYPE";
 pub(crate) const DEFAULT_SIGNATURE_TYPE: &str = "proxy";
 
 pub(crate) const NO_WALLET_MSG: &str =
-    "No wallet configured. Run `polymarket wallet create` or `polymarket wallet import <key>`";
+    "No wallet configured. Run `polymarket wallet create`, `polymarket wallet import <key>`, or `polymarket wallet connect`";
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SignerType {
+    #[default]
+    Local,
+    Cwp,
+}
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Config {
-    pub private_key: String,
+    #[serde(default)]
+    pub signer_type: SignerType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub private_key: Option<String>,
     pub chain_id: u64,
     #[serde(default = "default_signature_type")]
     pub signature_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwp_provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwp_address: Option<String>,
 }
 
 fn default_signature_type() -> String {
@@ -94,7 +109,7 @@ pub fn resolve_signature_type(cli_flag: Option<&str>) -> Result<String> {
     Ok(DEFAULT_SIGNATURE_TYPE.to_string())
 }
 
-pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()> {
+fn write_config(config: &Config) -> Result<()> {
     let dir = config_dir()?;
     fs::create_dir_all(&dir).context("Failed to create config directory")?;
 
@@ -104,12 +119,7 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
     }
 
-    let config = Config {
-        private_key: key.to_string(),
-        chain_id,
-        signature_type: signature_type.to_string(),
-    };
-    let json = serde_json::to_string_pretty(&config)?;
+    let json = serde_json::to_string_pretty(config)?;
     let path = config_path()?;
 
     #[cfg(unix)]
@@ -135,6 +145,28 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
     Ok(())
 }
 
+pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()> {
+    write_config(&Config {
+        signer_type: SignerType::Local,
+        private_key: Some(key.to_string()),
+        chain_id,
+        signature_type: signature_type.to_string(),
+        cwp_provider: None,
+        cwp_address: None,
+    })
+}
+
+pub fn save_cwp_wallet(provider: &str, address: &str, chain_id: u64, signature_type: &str) -> Result<()> {
+    write_config(&Config {
+        signer_type: SignerType::Cwp,
+        private_key: None,
+        chain_id,
+        signature_type: signature_type.to_string(),
+        cwp_provider: Some(provider.to_string()),
+        cwp_address: Some(address.to_string()),
+    })
+}
+
 /// Priority: CLI flag > env var > config file.
 pub fn resolve_key(cli_flag: Option<&str>) -> Result<(Option<String>, KeySource)> {
     if let Some(key) = cli_flag {
@@ -146,7 +178,9 @@ pub fn resolve_key(cli_flag: Option<&str>) -> Result<(Option<String>, KeySource)
         return Ok((Some(key), KeySource::EnvVar));
     }
     if let Some(config) = load_config()? {
-        return Ok((Some(config.private_key), KeySource::ConfigFile));
+        if let Some(key) = config.private_key {
+            return Ok((Some(key), KeySource::ConfigFile));
+        }
     }
     Ok((None, KeySource::None))
 }
