@@ -192,7 +192,7 @@ impl CwpSigner {
 
     fn sign_hash_blocking(&self, hash: &B256) -> Result<Signature> {
         let input = serde_json::to_value(SignHashInput {
-            account: self.address.to_string(),
+            account: self.address.to_checksum(None),
             hash: format!("{hash}"),
         })?;
 
@@ -253,7 +253,7 @@ impl CwpSigner {
         let mut typed_data_json = serde_json::to_value(typed_data)?;
         normalize_typed_data_for_wallet(&mut typed_data_json);
         let input = serde_json::json!({
-            "account": self.address.to_string(),
+            "account": self.address.to_checksum(None),
             "typedData": typed_data_json,
         });
 
