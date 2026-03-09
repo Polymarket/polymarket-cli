@@ -121,15 +121,17 @@ pub async fn send_and_confirm_cwp_tx(
         .await
         .context("CWP send-transaction failed")?;
 
-    // Wait for on-chain confirmation (poll immediately, then every 2s, timeout at 2 min)
-    for _ in 0..60 {
+    // Wait for on-chain confirmation (poll every 2s, timeout at 2 min)
+    for i in 0..60 {
+        if i > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
         if let Some(receipt) = provider.get_transaction_receipt(tx_hash).await? {
             if !receipt.status() {
                 bail!("Transaction {tx_hash} reverted on-chain");
             }
             return Ok(tx_hash);
         }
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
     bail!("Transaction {tx_hash} not confirmed after 2 minutes")
 }

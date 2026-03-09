@@ -420,7 +420,9 @@ fn normalize_value(
     type_map: &HashMap<String, HashMap<String, String>>,
 ) {
     if sol_type.starts_with("uint") || sol_type.starts_with("int") {
-        // Convert hex "0x..." to decimal string
+        // Convert hex "0x..." to decimal string.
+        // Note: uses U256 for both uint and int types. Polymarket only uses uint256;
+        // proper signed int support would need I256 if int types are ever used.
         if let Some(s) = value.as_str() {
             if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
                 if let Ok(n) = U256::from_str_radix(hex, 16) {
