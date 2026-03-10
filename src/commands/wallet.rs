@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use alloy::signers::local::PrivateKeySigner;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::auth::LocalSigner;
@@ -25,6 +26,9 @@ pub enum WalletCommand {
         /// Signature type: eoa, proxy (default), or gnosis-safe
         #[arg(long, default_value = "proxy")]
         signature_type: String,
+        /// Store the key as plaintext (not recommended)
+        #[arg(long)]
+        no_password: bool,
     },
     /// Import an existing private key
     Import {
@@ -36,11 +40,16 @@ pub enum WalletCommand {
         /// Signature type: eoa, proxy (default), or gnosis-safe
         #[arg(long, default_value = "proxy")]
         signature_type: String,
+        /// Store the key as plaintext (not recommended)
+        #[arg(long)]
+        no_password: bool,
     },
     /// Show the address of the configured wallet
     Address,
     /// Show wallet info (address, config path, key source)
     Show,
+    /// Export the private key (decrypts if encrypted)
+    Export,
     /// Delete all config and keys (fresh install)
     Reset {
         /// Skip confirmation prompt
@@ -58,16 +67,43 @@ pub fn execute(
         WalletCommand::Create {
             force,
             signature_type,
-        } => cmd_create(output, force, &signature_type),
+            no_password,
+        } => cmd_create(output, force, &signature_type, no_password),
         WalletCommand::Import {
             key,
             force,
             signature_type,
-        } => cmd_import(&key, output, force, &signature_type),
+            no_password,
+        } => cmd_import(&key, output, force, &signature_type, no_password),
         WalletCommand::Address => cmd_address(output, private_key_flag),
         WalletCommand::Show => cmd_show(output, private_key_flag),
+        WalletCommand::Export => cmd_export(output, private_key_flag),
         WalletCommand::Reset { force } => cmd_reset(output, force),
     }
+}
+
+fn save_encrypted(signer: &PrivateKeySigner, password: &str, signature_type: &str) -> Result<()> {
+    let ks_dir = config::keystore_dir()?;
+    std::fs::create_dir_all(&ks_dir).context("Failed to create keystore directory")?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&ks_dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+
+    // Remove any existing keystore files
+    if let Ok(entries) = std::fs::read_dir(&ks_dir) {
+        for entry in entries.flatten() {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+
+    let mut rng = rand::thread_rng();
+    PrivateKeySigner::encrypt_keystore(&ks_dir, &mut rng, signer.to_bytes(), password, None)
+        .context("Failed to encrypt keystore")?;
+
+    config::save_wallet_encrypted(POLYGON, signature_type)
 }
 
 fn guard_overwrite(force: bool) -> Result<()> {
@@ -80,14 +116,26 @@ fn guard_overwrite(force: bool) -> Result<()> {
     Ok(())
 }
 
-fn cmd_create(output: OutputFormat, force: bool, signature_type: &str) -> Result<()> {
+fn cmd_create(
+    output: OutputFormat,
+    force: bool,
+    signature_type: &str,
+    no_password: bool,
+) -> Result<()> {
     guard_overwrite(force)?;
 
     let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
     let address = signer.address();
-    let key_hex = format!("{:#x}", signer.to_bytes());
+    let encrypted = !no_password;
 
-    config::save_wallet(&key_hex, POLYGON, signature_type)?;
+    if encrypted {
+        let password = config::read_new_password()?;
+        save_encrypted(&signer, &password, signature_type)?;
+    } else {
+        let key_hex = format!("{:#x}", signer.to_bytes());
+        config::save_wallet(&key_hex, POLYGON, signature_type)?;
+    }
+
     let config_path = config::config_path()?;
     let proxy_addr = derive_proxy_wallet(address, POLYGON);
 
@@ -100,6 +148,7 @@ fn cmd_create(output: OutputFormat, force: bool, signature_type: &str) -> Result
                     "proxy_address": proxy_addr.map(|a| a.to_string()),
                     "signature_type": signature_type,
                     "config_path": config_path.display().to_string(),
+                    "encrypted": encrypted,
                 })
             );
         }
@@ -110,25 +159,42 @@ fn cmd_create(output: OutputFormat, force: bool, signature_type: &str) -> Result
                 println!("Proxy wallet:   {proxy}");
             }
             println!("Signature type: {signature_type}");
+            println!("Encrypted:      {encrypted}");
             println!("Config:         {}", config_path.display());
-            println!();
-            println!("IMPORTANT: Back up your private key from the config file.");
-            println!("           If lost, your funds cannot be recovered.");
+            if !encrypted {
+                println!();
+                println!(
+                    "WARNING: Key stored as plaintext. Use without --no-password for encryption."
+                );
+            }
         }
     }
     Ok(())
 }
 
-fn cmd_import(key: &str, output: OutputFormat, force: bool, signature_type: &str) -> Result<()> {
+fn cmd_import(
+    key: &str,
+    output: OutputFormat,
+    force: bool,
+    signature_type: &str,
+    no_password: bool,
+) -> Result<()> {
     guard_overwrite(force)?;
 
     let signer = LocalSigner::from_str(key)
         .context("Invalid private key")?
         .with_chain_id(Some(POLYGON));
     let address = signer.address();
-    let key_hex = format!("{:#x}", signer.to_bytes());
+    let encrypted = !no_password;
 
-    config::save_wallet(&key_hex, POLYGON, signature_type)?;
+    if encrypted {
+        let password = config::read_new_password()?;
+        save_encrypted(&signer, &password, signature_type)?;
+    } else {
+        let key_hex = format!("{:#x}", signer.to_bytes());
+        config::save_wallet(&key_hex, POLYGON, signature_type)?;
+    }
+
     let config_path = config::config_path()?;
     let proxy_addr = derive_proxy_wallet(address, POLYGON);
 
@@ -141,6 +207,7 @@ fn cmd_import(key: &str, output: OutputFormat, force: bool, signature_type: &str
                     "proxy_address": proxy_addr.map(|a| a.to_string()),
                     "signature_type": signature_type,
                     "config_path": config_path.display().to_string(),
+                    "encrypted": encrypted,
                 })
             );
         }
@@ -151,6 +218,7 @@ fn cmd_import(key: &str, output: OutputFormat, force: bool, signature_type: &str
                 println!("Proxy wallet:   {proxy}");
             }
             println!("Signature type: {signature_type}");
+            println!("Encrypted:      {encrypted}");
             println!("Config:         {}", config_path.display());
         }
     }
@@ -212,6 +280,30 @@ fn cmd_show(output: OutputFormat, private_key_flag: Option<&str>) -> Result<()> 
             println!("Signature type: {sig_type}");
             println!("Config path:    {}", config_path.display());
             println!("Key source:     {}", source.label());
+        }
+    }
+    Ok(())
+}
+
+fn cmd_export(output: OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
+    let (key, source) = config::resolve_key(private_key_flag)?;
+    let key = key.ok_or_else(|| anyhow::anyhow!("{}", config::NO_WALLET_MSG))?;
+
+    match output {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "private_key": key,
+                    "source": source.label(),
+                })
+            );
+        }
+        OutputFormat::Table => {
+            println!("Private key: {key}");
+            println!("Source:      {}", source.label());
+            println!();
+            println!("WARNING: Do not share this key. Anyone with it can access your funds.");
         }
     }
     Ok(())
