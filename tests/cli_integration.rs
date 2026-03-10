@@ -486,3 +486,30 @@ fn wallet_address_succeeds_or_fails_gracefully() {
     // Either succeeds or fails with an error message — not a panic
     assert!(output.status.success() || !output.stderr.is_empty());
 }
+
+#[test]
+fn watch_flag_appears_in_help() {
+    polymarket()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--watch"));
+}
+
+#[test]
+fn watch_with_json_output_rejected() {
+    polymarket()
+        .args(["--watch", "5", "-o", "json", "wallet", "show"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--watch is not supported with JSON"));
+}
+
+#[test]
+fn watch_zero_interval_rejected() {
+    polymarket()
+        .args(["--watch", "0", "wallet", "show"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("at least 1 second"));
+}
