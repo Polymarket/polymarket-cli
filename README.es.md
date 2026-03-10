@@ -2,11 +2,11 @@
 
 # Polymarket CLI
 
-Rust CLI for Polymarket. Browse markets, place orders, manage positions, and interact with onchain contracts — from a terminal or as a JSON API for scripts and agents.
+CLI de Rust para Polymarket. Explora mercados, realiza órdenes, gestiona posiciones e interactúa con contratos on-chain — desde una terminal o como API JSON para scripts y agentes.
 
-> **Warning:** This is early, experimental software. Use at your own risk and do not use with large amounts of funds. APIs, commands, and behavior may change without notice. Always verify transactions before confirming.
+> **Advertencia:** Este es software experimental en etapa temprana. Úsalo bajo tu propia responsabilidad y no lo uses con grandes cantidades de fondos. Las APIs, comandos y comportamientos pueden cambiar sin previo aviso. Siempre verifica las transacciones antes de confirmar.
 
-## Install
+## Instalación
 
 ### Homebrew (macOS / Linux)
 
@@ -15,13 +15,13 @@ brew tap Polymarket/polymarket-cli https://github.com/Polymarket/polymarket-cli
 brew install polymarket
 ```
 
-### Shell script
+### Script de Shell
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/Polymarket/polymarket-cli/main/install.sh | sh
 ```
 
-### Build from source
+### Compilar desde el código fuente
 
 ```bash
 git clone https://github.com/Polymarket/polymarket-cli
@@ -29,52 +29,52 @@ cd polymarket-cli
 cargo install --path .
 ```
 
-## Quick Start
+## Inicio Rápido
 
 ```bash
-# No wallet needed — browse markets immediately
+# No necesitas wallet — explora mercados inmediatamente
 polymarket markets list --limit 5
 polymarket markets search "election"
 polymarket events list --tag politics
 
-# Check a specific market
+# Consultar un mercado específico
 polymarket markets get will-trump-win-the-2024-election
 
-# JSON output for scripts
+# Salida JSON para scripts
 polymarket -o json markets list --limit 3
 ```
 
-To trade, set up a wallet:
+Para operar, configura una wallet:
 
 ```bash
 polymarket setup
-# Or manually:
+# O manualmente:
 polymarket wallet create
 polymarket approve set
 ```
 
-## Configuration
+## Configuración
 
-### Wallet Setup
+### Configuración de Wallet
 
-The CLI needs a private key to sign orders and on-chain transactions. Three ways to provide it (checked in this order):
+La CLI necesita una clave privada para firmar órdenes y transacciones on-chain. Tres formas de proporcionarla (verificadas en este orden):
 
-1. **CLI flag**: `--private-key 0xabc...`
-2. **Environment variable**: `POLYMARKET_PRIVATE_KEY=0xabc...`
-3. **Config file**: `~/.config/polymarket/config.json`
+1. **Flag CLI**: `--private-key 0xabc...`
+2. **Variable de entorno**: `POLYMARKET_PRIVATE_KEY=0xabc...`
+3. **Archivo de configuración**: `~/.config/polymarket/config.json`
 
 ```bash
-# Create a new wallet (generates random key, saves to config)
+# Crear una nueva wallet (genera clave aleatoria, guarda en config)
 polymarket wallet create
 
-# Import an existing key
+# Importar una clave existente
 polymarket wallet import 0xabc123...
 
-# Check what's configured
+# Ver la configuración actual
 polymarket wallet show
 ```
 
-The config file (`~/.config/polymarket/config.json`):
+El archivo de configuración (`~/.config/polymarket/config.json`):
 
 ```json
 {
@@ -84,29 +84,29 @@ The config file (`~/.config/polymarket/config.json`):
 }
 ```
 
-### Signature Types
+### Tipos de Firma
 
-- `proxy` (default) — uses Polymarket's proxy wallet system
-- `eoa` — signs directly with your key
-- `gnosis-safe` — for multisig wallets
+- `proxy` (por defecto) — usa el sistema de wallet proxy de Polymarket
+- `eoa` — firma directamente con tu clave
+- `gnosis-safe` — para wallets multisig
 
-Override per-command with `--signature-type eoa` or via `POLYMARKET_SIGNATURE_TYPE`.
+Sobrescribir por comando con `--signature-type eoa` o vía `POLYMARKET_SIGNATURE_TYPE`.
 
-### What Needs a Wallet
+### Qué Necesita una Wallet
 
-Most commands work without a wallet — browsing markets, viewing order books, checking prices. You only need a wallet for:
+La mayoría de comandos funcionan sin wallet — explorar mercados, ver libros de órdenes, consultar precios. Solo necesitas wallet para:
 
-- Placing and canceling orders (`clob create-order`, `clob market-order`, `clob cancel-*`)
-- Checking your balances and trades (`clob balance`, `clob trades`, `clob orders`)
-- On-chain operations (`approve set`, `ctf split/merge/redeem`)
-- Reward and API key management (`clob rewards`, `clob create-api-key`)
+- Crear y cancelar órdenes (`clob create-order`, `clob market-order`, `clob cancel-*`)
+- Consultar balances e intercambios (`clob balance`, `clob trades`, `clob orders`)
+- Operaciones on-chain (`approve set`, `ctf split/merge/redeem`)
+- Gestión de recompensas y claves API (`clob rewards`, `clob create-api-key`)
 
-## Output Formats
+## Formatos de Salida
 
-Every command supports `--output table` (default) and `--output json`.
+Cada comando soporta `--output table` (por defecto) y `--output json`.
 
 ```bash
-# Human-readable table (default)
+# Tabla legible para humanos (por defecto)
 polymarket markets list --limit 2
 ```
 
@@ -117,7 +117,7 @@ polymarket markets list --limit 2
 ```
 
 ```bash
-# Machine-readable JSON
+# JSON legible por máquina
 polymarket -o json markets list --limit 2
 ```
 
@@ -128,36 +128,36 @@ polymarket -o json markets list --limit 2
 ]
 ```
 
-Short form: `-o json` or `-o table`.
+Forma corta: `-o json` o `-o table`.
 
-Errors follow the same pattern — table mode prints `Error: ...` to stderr, JSON mode prints `{"error": "..."}` to stdout. Non-zero exit code either way.
+Los errores siguen el mismo patrón — modo tabla imprime `Error: ...` en stderr, modo JSON imprime `{"error": "..."}` en stdout. Código de salida no cero en ambos casos.
 
-## Commands
+## Comandos
 
-### Markets
+### Mercados
 
 ```bash
-# List markets with filters
+# Listar mercados con filtros
 polymarket markets list --limit 10
 polymarket markets list --active true --order volume_num
 polymarket markets list --closed false --limit 50 --offset 25
 
-# Get a single market by ID or slug
+# Obtener un mercado por ID o slug
 polymarket markets get 12345
 polymarket markets get will-trump-win
 
-# Search
+# Buscar
 polymarket markets search "bitcoin" --limit 5
 
-# Get tags for a market
+# Obtener etiquetas de un mercado
 polymarket markets tags 12345
 ```
 
-**Flags for `markets list`**: `--limit`, `--offset`, `--order`, `--ascending`, `--active`, `--closed`
+**Flags para `markets list`**: `--limit`, `--offset`, `--order`, `--ascending`, `--active`, `--closed`
 
-### Events
+### Eventos
 
-Events group related markets (e.g. "2024 Election" contains multiple yes/no markets).
+Los eventos agrupan mercados relacionados (ej. "Elección 2024" contiene múltiples mercados sí/no).
 
 ```bash
 polymarket events list --limit 10
@@ -166,68 +166,68 @@ polymarket events get 500
 polymarket events tags 500
 ```
 
-**Flags for `events list`**: `--limit`, `--offset`, `--order`, `--ascending`, `--active`, `--closed`, `--tag`
+**Flags para `events list`**: `--limit`, `--offset`, `--order`, `--ascending`, `--active`, `--closed`, `--tag`
 
-### Tags, Series, Comments, Profiles, Sports
+### Etiquetas, Series, Comentarios, Perfiles, Deportes
 
 ```bash
-# Tags
+# Etiquetas
 polymarket tags list
 polymarket tags get politics
 polymarket tags related politics
 polymarket tags related-tags politics
 
-# Series (recurring events)
+# Series (eventos recurrentes)
 polymarket series list --limit 10
 polymarket series get 42
 
-# Comments on an entity
+# Comentarios en una entidad
 polymarket comments list --entity-type event --entity-id 500
 polymarket comments get abc123
 polymarket comments by-user 0xf5E6...
 
-# Public profiles
+# Perfiles públicos
 polymarket profiles get 0xf5E6...
 
-# Sports metadata
+# Metadatos de deportes
 polymarket sports list
 polymarket sports market-types
 polymarket sports teams --league NFL --limit 32
 ```
 
-### Order Book & Prices (CLOB)
+### Libro de Órdenes y Precios (CLOB)
 
-All read-only — no wallet needed.
+Todo de solo lectura — no se necesita wallet.
 
 ```bash
-# Check API health
+# Verificar salud de la API
 polymarket clob ok
 
-# Prices
+# Precios
 polymarket clob price 48331043336612883... --side buy
 polymarket clob midpoint 48331043336612883...
 polymarket clob spread 48331043336612883...
 
-# Batch queries (comma-separated token IDs)
+# Consultas por lotes (IDs de token separados por coma)
 polymarket clob batch-prices "TOKEN1,TOKEN2" --side buy
 polymarket clob midpoints "TOKEN1,TOKEN2"
 polymarket clob spreads "TOKEN1,TOKEN2"
 
-# Order book
+# Libro de órdenes
 polymarket clob book 48331043336612883...
 polymarket clob books "TOKEN1,TOKEN2"
 
-# Last trade
+# Último intercambio
 polymarket clob last-trade 48331043336612883...
 
-# Market info
-polymarket clob market 0xABC123...  # by condition ID
-polymarket clob markets             # list all
+# Información del mercado
+polymarket clob market 0xABC123...  # por condition ID
+polymarket clob markets             # listar todos
 
-# Price history
+# Historial de precios
 polymarket clob price-history 48331043336612883... --interval 1d --fidelity 30
 
-# Metadata
+# Metadatos
 polymarket clob tick-size 48331043336612883...
 polymarket clob fee-rate 48331043336612883...
 polymarket clob neg-risk 48331043336612883...
@@ -235,51 +235,51 @@ polymarket clob time
 polymarket clob geoblock
 ```
 
-**Interval options for `price-history`**: `1m`, `1h`, `6h`, `1d`, `1w`, `max`
+**Opciones de intervalo para `price-history`**: `1m`, `1h`, `6h`, `1d`, `1w`, `max`
 
-### Trading (CLOB, authenticated)
+### Trading (CLOB, autenticado)
 
-Requires a configured wallet.
+Requiere wallet configurada.
 
 ```bash
-# Place a limit order (buy 10 shares at $0.50)
+# Crear orden límite (comprar 10 acciones a $0.50)
 polymarket clob create-order \
   --token 48331043336612883... \
   --side buy --price 0.50 --size 10
 
-# Place a market order (buy $5 worth)
+# Crear orden de mercado (comprar $5 de valor)
 polymarket clob market-order \
   --token 48331043336612883... \
   --side buy --amount 5
 
-# Post multiple orders at once
+# Publicar múltiples órdenes a la vez
 polymarket clob post-orders \
   --tokens "TOKEN1,TOKEN2" \
   --side buy \
   --prices "0.40,0.60" \
   --sizes "10,10"
 
-# Cancel
+# Cancelar
 polymarket clob cancel ORDER_ID
 polymarket clob cancel-orders "ORDER1,ORDER2"
 polymarket clob cancel-market --market 0xCONDITION...
 polymarket clob cancel-all
 
-# View your orders and trades
+# Ver tus órdenes e intercambios
 polymarket clob orders
 polymarket clob orders --market 0xCONDITION...
 polymarket clob order ORDER_ID
 polymarket clob trades
 
-# Check balances
+# Consultar balances
 polymarket clob balance --asset-type collateral
 polymarket clob balance --asset-type conditional --token 48331043336612883...
 polymarket clob update-balance --asset-type collateral
 ```
 
-**Order types**: `GTC` (default), `FOK`, `GTD`, `FAK`. Add `--post-only` for limit orders.
+**Tipos de orden**: `GTC` (por defecto), `FOK`, `GTD`, `FAK`. Añadir `--post-only` para órdenes límite.
 
-### Rewards & API Keys (CLOB, authenticated)
+### Recompensas y Claves API (CLOB, autenticado)
 
 ```bash
 polymarket clob rewards --date 2024-06-15
@@ -289,115 +289,115 @@ polymarket clob reward-percentages
 polymarket clob current-rewards
 polymarket clob market-reward 0xCONDITION...
 
-# Check if orders are scoring rewards
+# Verificar si las órdenes están obteniendo recompensas
 polymarket clob order-scoring ORDER_ID
 polymarket clob orders-scoring "ORDER1,ORDER2"
 
-# API key management
+# Gestión de claves API
 polymarket clob api-keys
 polymarket clob create-api-key
 polymarket clob delete-api-key
 
-# Account status
+# Estado de la cuenta
 polymarket clob account-status
 polymarket clob notifications
 polymarket clob delete-notifications "NOTIF1,NOTIF2"
 ```
 
-### On-Chain Data
+### Datos On-Chain
 
-Public data — no wallet needed.
+Datos públicos — no se necesita wallet.
 
 ```bash
-# Portfolio
+# Portafolio
 polymarket data positions 0xWALLET_ADDRESS
 polymarket data closed-positions 0xWALLET_ADDRESS
 polymarket data value 0xWALLET_ADDRESS
 polymarket data traded 0xWALLET_ADDRESS
 
-# Trade history
+# Historial de intercambios
 polymarket data trades 0xWALLET_ADDRESS --limit 50
 
-# Activity
+# Actividad
 polymarket data activity 0xWALLET_ADDRESS
 
-# Market data
+# Datos del mercado
 polymarket data holders 0xCONDITION_ID
 polymarket data open-interest 0xCONDITION_ID
 polymarket data volume 12345  # event ID
 
-# Leaderboards
+# Tablas de clasificación
 polymarket data leaderboard --period month --order-by pnl --limit 10
 polymarket data builder-leaderboard --period week
 polymarket data builder-volume --period month
 ```
 
-### Contract Approvals
+### Aprobaciones de Contratos
 
-Before trading, Polymarket contracts need ERC-20 (USDC) and ERC-1155 (CTF token) approvals.
+Antes de operar, los contratos de Polymarket necesitan aprobaciones ERC-20 (USDC) y ERC-1155 (token CTF).
 
 ```bash
-# Check current approvals (read-only)
+# Verificar aprobaciones actuales (solo lectura)
 polymarket approve check
 polymarket approve check 0xSOME_ADDRESS
 
-# Approve all contracts (sends 6 on-chain transactions, needs MATIC for gas)
+# Aprobar todos los contratos (envía 6 transacciones on-chain, necesita MATIC para gas)
 polymarket approve set
 ```
 
-### CTF Operations
+### Operaciones CTF
 
-Split, merge, and redeem conditional tokens directly on-chain.
+Dividir, fusionar y canjear tokens condicionales directamente on-chain.
 
 ```bash
-# Split $10 USDC into YES/NO tokens
+# Dividir $10 USDC en tokens YES/NO
 polymarket ctf split --condition 0xCONDITION... --amount 10
 
-# Merge tokens back to USDC
+# Fusionar tokens de vuelta a USDC
 polymarket ctf merge --condition 0xCONDITION... --amount 10
 
-# Redeem winning tokens after resolution
+# Canjear tokens ganadores después de la resolución
 polymarket ctf redeem --condition 0xCONDITION...
 
-# Redeem neg-risk positions
+# Canjear posiciones de riesgo negativo
 polymarket ctf redeem-neg-risk --condition 0xCONDITION... --amounts "10,5"
 
-# Calculate IDs (read-only, no wallet needed)
+# Calcular IDs (solo lectura, no se necesita wallet)
 polymarket ctf condition-id --oracle 0xORACLE... --question 0xQUESTION... --outcomes 2
 polymarket ctf collection-id --condition 0xCONDITION... --index-set 1
 polymarket ctf position-id --collection 0xCOLLECTION...
 ```
 
-`--amount` is in USDC (e.g., `10` = $10). The `--partition` flag defaults to binary (`1,2`). On-chain operations require MATIC for gas on Polygon.
+`--amount` está en USDC (ej., `10` = $10). El flag `--partition` por defecto es binario (`1,2`). Las operaciones on-chain requieren MATIC para gas en Polygon.
 
-### Bridge
+### Puente
 
-Deposit assets from other chains into Polymarket.
+Depositary activos de otras cadenas en Polymarket.
 
 ```bash
-# Get deposit addresses (EVM, Solana, Bitcoin)
+# Obtener direcciones de depósito (EVM, Solana, Bitcoin)
 polymarket bridge deposit 0xWALLET_ADDRESS
 
-# List supported chains and tokens
+# Listar cadenas y tokens soportados
 polymarket bridge supported-assets
 
-# Check deposit status
+# Verificar estado del depósito
 polymarket bridge status 0xDEPOSIT_ADDRESS
 ```
 
-### Wallet Management
+### Gestión de Wallet
 
 ```bash
-polymarket wallet create               # Generate new random wallet
-polymarket wallet create --force       # Overwrite existing
-polymarket wallet import 0xKEY...      # Import existing key
-polymarket wallet address              # Print wallet address
-polymarket wallet show                 # Full wallet info (address, source, config path)
-polymarket wallet reset                # Delete config (prompts for confirmation)
-polymarket wallet reset --force        # Delete without confirmation
+polymarket wallet create               # Generar nueva wallet aleatoria
+polymarket wallet create --force       # Sobrescribir existente
+polymarket wallet import 0xKEY...      # Importar clave existente
+polymarket wallet address              # Imprimir dirección de wallet
+polymarket wallet show                 # Info completa de wallet (dirección, fuente, ruta de config)
+polymarket wallet reset                # Borrar config (pide confirmación)
+polymarket wallet reset --force        # Borrar sin confirmación
 ```
 
-### Interactive Shell
+### Shell Interactivo
 
 ```bash
 polymarket shell
@@ -406,21 +406,21 @@ polymarket shell
 # polymarket> exit
 ```
 
-Supports command history. All commands work the same as the CLI, just without the `polymarket` prefix.
+Soporta historial de comandos. Todos los comandos funcionan igual que en CLI, solo sin el prefijo `polymarket`.
 
-### Other
+### Otros
 
 ```bash
-polymarket status     # API health check
-polymarket setup      # Guided first-time setup wizard
-polymarket upgrade    # Update to the latest version
+polymarket status     # Verificación de salud de API
+polymarket setup      # Asistente de configuración inicial guiado
+polymarket upgrade    # Actualizar a la última versión
 polymarket --version
 polymarket --help
 ```
 
-## Common Workflows
+## Flujos de Trabajo Comunes
 
-### Browse and research markets
+### Explorar e investigar mercados
 
 ```bash
 polymarket markets search "bitcoin" --limit 5
@@ -429,16 +429,16 @@ polymarket clob book 48331043336612883...
 polymarket clob price-history 48331043336612883... --interval 1d
 ```
 
-### Set up a new wallet and start trading
+### Configurar una nueva wallet y empezar a operar
 
 ```bash
 polymarket wallet create
-polymarket approve set                    # needs MATIC for gas
+polymarket approve set                    # necesita MATIC para gas
 polymarket clob balance --asset-type collateral
 polymarket clob market-order --token TOKEN_ID --side buy --amount 5
 ```
 
-### Monitor your portfolio
+### Monitorear tu portafolio
 
 ```bash
 polymarket data positions 0xYOUR_ADDRESS
@@ -447,49 +447,49 @@ polymarket clob orders
 polymarket clob trades
 ```
 
-### Place and manage limit orders
+### Crear y gestionar órdenes límite
 
 ```bash
-# Place order
+# Crear orden
 polymarket clob create-order --token TOKEN_ID --side buy --price 0.45 --size 20
 
-# Check it
+# Verificarla
 polymarket clob orders
 
-# Cancel if needed
+# Cancelar si es necesario
 polymarket clob cancel ORDER_ID
 
-# Or cancel everything
+# O cancelar todo
 polymarket clob cancel-all
 ```
 
-### Script with JSON output
+### Script con salida JSON
 
 ```bash
-# Pipe market data to jq
+# Enviar datos de mercado por pipe a jq
 polymarket -o json markets list --limit 100 | jq '.[].question'
 
-# Check prices programmatically
+# Consultar precios programáticamente
 polymarket -o json clob midpoint TOKEN_ID | jq '.mid'
 
-# Error handling in scripts
+# Manejo de errores en scripts
 if ! result=$(polymarket -o json clob balance --asset-type collateral 2>/dev/null); then
-  echo "Failed to fetch balance"
+  echo "Error al obtener balance"
 fi
 ```
 
-## Architecture
+## Arquitectura
 
 ```
 src/
-  main.rs        -- CLI entry point, clap parsing, error handling
-  auth.rs        -- Wallet resolution, RPC provider, CLOB authentication
-  config.rs      -- Config file (~/.config/polymarket/config.json)
-  shell.rs       -- Interactive REPL
-  commands/      -- One module per command group
-  output/        -- Table and JSON rendering per command group
+  main.rs        -- Punto de entrada CLI, parsing clap, manejo de errores
+  auth.rs        -- Resolución de wallet, proveedor RPC, autenticación CLOB
+  config.rs      -- Archivo de configuración (~/.config/polymarket/config.json)
+  shell.rs       -- REPL interactivo
+  commands/      -- Un módulo por grupo de comandos
+  output/        -- Renderizado de tabla y JSON por grupo de comandos
 ```
 
-## License
+## Licencia
 
 MIT
