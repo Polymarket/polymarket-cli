@@ -6,7 +6,8 @@ mod shell;
 
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::Shell;
 use output::OutputFormat;
 
 #[derive(Parser)]
@@ -64,6 +65,11 @@ enum Commands {
     Status,
     /// Update to the latest version
     Upgrade,
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        shell: Shell,
+    },
 }
 
 #[tokio::main]
@@ -117,6 +123,15 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
             commands::wallet::execute(args, cli.output, cli.private_key.as_deref())
         }
         Commands::Upgrade => commands::upgrade::execute(),
+        Commands::Completions { shell } => {
+            clap_complete::generate(
+                shell,
+                &mut Cli::command(),
+                "polymarket",
+                &mut std::io::stdout(),
+            );
+            Ok(())
+        }
         Commands::Status => {
             let status = gamma.status().await?;
             match cli.output {
