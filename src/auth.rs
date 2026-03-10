@@ -1,11 +1,12 @@
 use std::str::FromStr;
 
+use alloy::primitives::Address;
 use alloy::providers::ProviderBuilder;
 use anyhow::{Context, Result};
 use polymarket_client_sdk::auth::state::Authenticated;
 use polymarket_client_sdk::auth::{LocalSigner, Normal, Signer as _};
 use polymarket_client_sdk::clob::types::SignatureType;
-use polymarket_client_sdk::{POLYGON, clob};
+use polymarket_client_sdk::{POLYGON, clob, derive_proxy_wallet};
 
 use crate::config;
 
@@ -75,6 +76,29 @@ pub async fn create_provider(
         .connect(&rpc_url())
         .await
         .context("Failed to connect to Polygon RPC with wallet")
+}
+
+/// Resolve the wallet address that owns positions and allowances.
+///
+/// For `eoa` signature type, returns the EOA address directly.
+/// For `proxy`, returns the derived proxy wallet address.
+/// For `gnosis-safe`, returns the derived Gnosis Safe address.
+pub fn resolve_wallet_address(
+    private_key: Option<&str>,
+    signature_type_flag: Option<&str>,
+) -> Result<Address> {
+    let signer = resolve_signer(private_key)?;
+    let eoa = polymarket_client_sdk::auth::Signer::address(&signer);
+    let sig_type = parse_signature_type(&config::resolve_signature_type(signature_type_flag)?);
+
+    match sig_type {
+        SignatureType::Eoa => Ok(eoa),
+        SignatureType::Proxy => derive_proxy_wallet(eoa, POLYGON)
+            .context("Failed to derive proxy wallet address for Polygon"),
+        SignatureType::GnosisSafe => polymarket_client_sdk::derive_safe_wallet(eoa, POLYGON)
+            .context("Failed to derive Gnosis Safe wallet address for Polygon"),
+        _ => Ok(eoa),
+    }
 }
 
 #[cfg(test)]

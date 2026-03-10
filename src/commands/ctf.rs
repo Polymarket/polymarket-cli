@@ -171,7 +171,12 @@ fn binary_u256_vec() -> Vec<U256> {
     DEFAULT_BINARY_SETS.iter().map(|&n| U256::from(n)).collect()
 }
 
-pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&str>) -> Result<()> {
+pub async fn execute(
+    args: CtfArgs,
+    output: OutputFormat,
+    private_key: Option<&str>,
+    _signature_type: Option<&str>,
+) -> Result<()> {
     match args.command {
         CtfCommand::Split {
             condition,
