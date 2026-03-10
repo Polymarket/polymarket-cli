@@ -257,10 +257,16 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
             struct Row {
                 #[tabled(rename = "Type")]
                 activity_type: String,
+                #[tabled(rename = "Side")]
+                side: String,
                 #[tabled(rename = "Market")]
                 title: String,
+                #[tabled(rename = "Outcome")]
+                outcome: String,
                 #[tabled(rename = "Size")]
                 size: String,
+                #[tabled(rename = "Price")]
+                price: String,
                 #[tabled(rename = "USDC")]
                 usdc_size: String,
                 #[tabled(rename = "Tx")]
@@ -270,8 +276,16 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
                 .iter()
                 .map(|a| Row {
                     activity_type: a.activity_type.to_string(),
+                    side: a
+                        .side
+                        .as_ref()
+                        .map_or_else(|| DASH.to_string(), ToString::to_string),
                     title: truncate(a.title.as_deref().unwrap_or(DASH), 35),
+                    outcome: truncate(a.outcome.as_deref().unwrap_or(DASH), 10),
                     size: format!("{:.2}", a.size),
+                    price: a
+                        .price
+                        .map_or_else(|| DASH.to_string(), |p| format!("{p:.4}")),
                     usdc_size: format_decimal(a.usdc_size),
                     tx: truncate(&a.transaction_hash.to_string(), 14),
                 })
@@ -285,9 +299,16 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
                 .map(|a| {
                     json!({
                         "activity_type": a.activity_type.to_string(),
+                        "side": a.side.as_ref().map(ToString::to_string),
                         "title": a.title,
+                        "outcome": a.outcome,
+                        "outcome_index": a.outcome_index,
                         "size": a.size.to_string(),
+                        "price": a.price.map(|p| p.to_string()),
                         "usdc_size": a.usdc_size.to_string(),
+                        "asset": a.asset.map(|v| v.to_string()),
+                        "condition_id": a.condition_id.map(|c| c.to_string()),
+                        "slug": a.slug,
                         "timestamp": a.timestamp,
                         "transaction_hash": a.transaction_hash.to_string(),
                         "proxy_wallet": a.proxy_wallet.to_string(),
