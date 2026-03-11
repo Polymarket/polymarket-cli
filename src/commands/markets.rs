@@ -42,7 +42,7 @@ pub enum MarketsCommand {
         #[arg(long)]
         offset: Option<i32>,
 
-        /// Sort field (e.g. `volume_num`, `liquidity_num`)
+        /// Sort field (e.g. `volume`, `liquidity`)
         #[arg(long)]
         order: Option<String>,
 
