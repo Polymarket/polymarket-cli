@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
 const SIG_TYPE_ENV_VAR: &str = "POLYMARKET_SIGNATURE_TYPE";
+const PASSWORD_ENV_VAR: &str = "POLYMARKET_PASSWORD";
 pub(crate) const DEFAULT_SIGNATURE_TYPE: &str = "proxy";
 
 pub(crate) const NO_WALLET_MSG: &str =
@@ -13,10 +14,13 @@ pub(crate) const NO_WALLET_MSG: &str =
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Config {
+    #[serde(default)]
     pub private_key: String,
     pub chain_id: u64,
     #[serde(default = "default_signature_type")]
     pub signature_type: String,
+    #[serde(default)]
+    pub encrypted: bool,
 }
 
 fn default_signature_type() -> String {
@@ -48,6 +52,29 @@ fn config_dir() -> Result<PathBuf> {
 
 pub fn config_path() -> Result<PathBuf> {
     Ok(config_dir()?.join("config.json"))
+}
+
+pub fn keystore_dir() -> Result<PathBuf> {
+    Ok(config_dir()?.join("keystore"))
+}
+
+/// Prompt for a password, or read from `POLYMARKET_PASSWORD` env var.
+pub fn read_password(prompt: &str) -> Result<String> {
+    if let Ok(pw) = std::env::var(PASSWORD_ENV_VAR)
+        && !pw.is_empty()
+    {
+        return Ok(pw);
+    }
+    rpassword::prompt_password(prompt).context("Failed to read password")
+}
+
+/// Prompt for a new password with confirmation.
+pub fn read_new_password() -> Result<String> {
+    let pw = read_password("Enter password to encrypt your key: ")?;
+    anyhow::ensure!(!pw.is_empty(), "Password cannot be empty");
+    let confirm = read_password("Confirm password: ")?;
+    anyhow::ensure!(pw == confirm, "Passwords do not match");
+    Ok(pw)
 }
 
 pub fn config_exists() -> bool {
@@ -94,7 +121,7 @@ pub fn resolve_signature_type(cli_flag: Option<&str>) -> Result<String> {
     Ok(DEFAULT_SIGNATURE_TYPE.to_string())
 }
 
-pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()> {
+fn write_config_file(config: &Config) -> Result<()> {
     let dir = config_dir()?;
     fs::create_dir_all(&dir).context("Failed to create config directory")?;
 
@@ -104,12 +131,7 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
     }
 
-    let config = Config {
-        private_key: key.to_string(),
-        chain_id,
-        signature_type: signature_type.to_string(),
-    };
-    let json = serde_json::to_string_pretty(&config)?;
+    let json = serde_json::to_string_pretty(config)?;
     let path = config_path()?;
 
     #[cfg(unix)]
@@ -135,7 +157,29 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
     Ok(())
 }
 
+/// Save wallet as plaintext (legacy, used only when `--no-password` is specified).
+pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()> {
+    write_config_file(&Config {
+        private_key: key.to_string(),
+        chain_id,
+        signature_type: signature_type.to_string(),
+        encrypted: false,
+    })
+}
+
+/// Save wallet as encrypted keystore. The keystore file must already be
+/// written to `keystore_dir()` by the caller.
+pub fn save_wallet_encrypted(chain_id: u64, signature_type: &str) -> Result<()> {
+    write_config_file(&Config {
+        private_key: String::new(),
+        chain_id,
+        signature_type: signature_type.to_string(),
+        encrypted: true,
+    })
+}
+
 /// Priority: CLI flag > env var > config file.
+/// If the config file uses encrypted keystore, prompts for password.
 pub fn resolve_key(cli_flag: Option<&str>) -> Result<(Option<String>, KeySource)> {
     if let Some(key) = cli_flag {
         return Ok((Some(key.to_string()), KeySource::Flag));
@@ -146,9 +190,30 @@ pub fn resolve_key(cli_flag: Option<&str>) -> Result<(Option<String>, KeySource)
         return Ok((Some(key), KeySource::EnvVar));
     }
     if let Some(config) = load_config()? {
+        if config.encrypted {
+            let key = decrypt_keystore()?;
+            return Ok((Some(key), KeySource::ConfigFile));
+        }
         return Ok((Some(config.private_key), KeySource::ConfigFile));
     }
     Ok((None, KeySource::None))
+}
+
+/// Decrypt the keystore file and return the private key hex.
+fn decrypt_keystore() -> Result<String> {
+    use polymarket_client_sdk::auth::LocalSigner;
+
+    let ks_dir = keystore_dir()?;
+    let entry = fs::read_dir(&ks_dir)
+        .context("Failed to read keystore directory")?
+        .flatten()
+        .find(|e| e.path().is_file())
+        .context("No keystore file found. Config says encrypted but keystore is missing.")?;
+
+    let password = read_password("Enter password to unlock wallet: ")?;
+    let signer = LocalSigner::decrypt_keystore(entry.path(), password)
+        .context("Failed to decrypt keystore. Wrong password?")?;
+    Ok(format!("{:#x}", signer.to_bytes()))
 }
 
 #[cfg(test)]
