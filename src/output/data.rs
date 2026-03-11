@@ -8,7 +8,7 @@ use serde_json::json;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{OutputFormat, format_decimal, truncate};
+use super::{DASH,OutputFormat, format_decimal, truncate};
 
 fn format_market(m: &Market) -> String {
     match m {
@@ -284,10 +284,10 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
                 .iter()
                 .map(|a| Row {
                     activity_type: a.activity_type.to_string(),
-                    side: a.side.as_ref().map(|s| s.to_string()).unwrap_or("—".into()),
-                    title: truncate(a.title.as_deref().unwrap_or("—"), 35),
-                    outcome: a.outcome.as_deref().unwrap_or("—").into(),
-                    price: a.price.as_ref().map(|p| format!("{:.4}", p)).unwrap_or("—".into()),
+                    side: a.side.as_ref().map(|s| s.to_string()).unwrap_or(DASH.into()),
+                    title: truncate(a.title.as_deref().unwrap_or(DASH), 35),
+                    outcome: a.outcome.as_deref().unwrap_or(DASH).into(),
+                    price: a.price.as_ref().map(|p| format!("{:.4}", p)).unwrap_or(DASH.into()),
                     size: format!("{:.2}", a.size),
                     usdc_size: format_decimal(a.usdc_size),
                     tx: truncate(&a.transaction_hash.to_string(), 14),

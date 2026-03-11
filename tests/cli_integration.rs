@@ -87,6 +87,7 @@ fn data_activity_requires_address() {
         .assert()
         .failure();
 }
+
 #[test]
 fn wallet_help_lists_subcommands() {
     polymarket()

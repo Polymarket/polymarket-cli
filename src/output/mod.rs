@@ -17,6 +17,8 @@ use tabled::Table;
 use tabled::settings::object::Columns;
 use tabled::settings::{Modify, Style, Width};
 
+pub(crate) const DASH: &str = "—";
+
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum OutputFormat {
     Table,
