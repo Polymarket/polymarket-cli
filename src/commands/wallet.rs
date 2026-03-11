@@ -92,18 +92,55 @@ fn save_encrypted(signer: &PrivateKeySigner, password: &str, signature_type: &st
         std::fs::set_permissions(&ks_dir, std::fs::Permissions::from_mode(0o700))?;
     }
 
-    // Remove any existing keystore files
+    // Write new keystore to a temp directory first so a failure doesn't destroy the old one
+    let tmp_dir = ks_dir.join(".tmp");
+    if tmp_dir.exists() {
+        std::fs::remove_dir_all(&tmp_dir).context("Failed to clean temp keystore dir")?;
+    }
+    std::fs::create_dir_all(&tmp_dir).context("Failed to create temp keystore dir")?;
+
+    let mut rng = rand::thread_rng();
+    PrivateKeySigner::encrypt_keystore(&tmp_dir, &mut rng, signer.to_bytes(), password, None)
+        .context("Failed to encrypt keystore")?;
+
+    // Find the newly written keystore file
+    let new_file = std::fs::read_dir(&tmp_dir)?
+        .flatten()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("encrypt_keystore produced no file"))?
+        .path();
+    let file_name = new_file
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("keystore file has no name"))?
+        .to_owned();
+
+    // Now safe to remove old keystore files
     if let Ok(entries) = std::fs::read_dir(&ks_dir) {
         for entry in entries.flatten() {
-            let _ = std::fs::remove_file(entry.path());
+            let path = entry.path();
+            if path != tmp_dir {
+                let _ = std::fs::remove_file(&path);
+            }
         }
     }
 
-    let mut rng = rand::thread_rng();
-    PrivateKeySigner::encrypt_keystore(&ks_dir, &mut rng, signer.to_bytes(), password, None)
-        .context("Failed to encrypt keystore")?;
+    // Move new keystore into place and clean up temp dir
+    std::fs::rename(&new_file, ks_dir.join(&file_name))
+        .context("Failed to move keystore into place")?;
+    let _ = std::fs::remove_dir_all(&tmp_dir);
 
     config::save_wallet_encrypted(POLYGON, signature_type)
+}
+
+/// Remove any leftover keystore files (e.g. when switching from encrypted to plaintext).
+fn cleanup_keystore_files() {
+    if let Ok(ks_dir) = config::keystore_dir() {
+        if let Ok(entries) = std::fs::read_dir(&ks_dir) {
+            for entry in entries.flatten() {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
 }
 
 fn guard_overwrite(force: bool) -> Result<()> {
@@ -132,6 +169,7 @@ fn cmd_create(
         let password = config::read_new_password()?;
         save_encrypted(&signer, &password, signature_type)?;
     } else {
+        cleanup_keystore_files();
         let key_hex = format!("{:#x}", signer.to_bytes());
         config::save_wallet(&key_hex, POLYGON, signature_type)?;
     }
@@ -191,6 +229,7 @@ fn cmd_import(
         let password = config::read_new_password()?;
         save_encrypted(&signer, &password, signature_type)?;
     } else {
+        cleanup_keystore_files();
         let key_hex = format!("{:#x}", signer.to_bytes());
         config::save_wallet(&key_hex, POLYGON, signature_type)?;
     }
