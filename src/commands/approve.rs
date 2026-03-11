@@ -157,7 +157,7 @@ async fn set(
     output: OutputFormat,
 ) -> Result<()> {
     let sig_type = config::resolve_signature_type(signature_type)?;
-    let is_proxy = sig_type == config::DEFAULT_SIGNATURE_TYPE;
+    let is_proxy = sig_type == "proxy";
 
     let provider = auth::create_provider(private_key).await?;
     let ctf_config = contract_config(POLYGON, false).context("No contract config for Polygon")?;
