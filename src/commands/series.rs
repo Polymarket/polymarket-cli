@@ -5,8 +5,8 @@ use polymarket_client_sdk::gamma::{
     types::request::{SeriesByIdRequest, SeriesListRequest},
 };
 
-use crate::output::series::{print_series_detail, print_series_table};
-use crate::output::{OutputFormat, print_json};
+use crate::output::OutputFormat;
+use crate::output::series::{print_series, print_series_item};
 
 #[derive(Args)]
 pub struct SeriesArgs {
@@ -59,26 +59,19 @@ pub async fn execute(client: &gamma::Client, args: SeriesArgs, output: OutputFor
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .ascending(ascending)
                 .maybe_closed(closed)
                 .build();
 
             let series = client.series(&request).await?;
-
-            match output {
-                OutputFormat::Table => print_series_table(&series),
-                OutputFormat::Json => print_json(&series)?,
-            }
+            print_series(&series, &output)?;
         }
 
         SeriesCommand::Get { id } => {
             let req = SeriesByIdRequest::builder().id(id).build();
             let series = client.series_by_id(&req).await?;
 
-            match output {
-                OutputFormat::Table => print_series_detail(&series),
-                OutputFormat::Json => print_json(&series)?,
-            }
+            print_series_item(&series, &output)?;
         }
     }
 

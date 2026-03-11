@@ -41,6 +41,11 @@ jobs:
         if: matrix.cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i'' -e "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+
       - name: Build
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
@@ -86,13 +91,23 @@ jobs:
         with:
           ref: main
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Update Homebrew formula
         run: scripts/update-formula.sh ${{ github.ref_name }}
 
-      - name: Commit and push updated formula
+      - name: Sync Cargo.toml version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" Cargo.toml
+          cargo update --workspace
+
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/polymarket.rb
-          git commit -m "brew: update formula for ${{ github.ref_name }}"
-          git push
+          git add Formula/polymarket.rb Cargo.toml Cargo.lock
+          git diff --cached --quiet && echo "Nothing to commit" || {
+            git commit -m "release: update formula and version to ${{ github.ref_name }}"
+            git push
+          }

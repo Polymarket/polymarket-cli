@@ -1,8 +1,11 @@
 use polymarket_client_sdk::gamma::types::response::PublicProfile;
 
-use super::{detail_field, print_detail_table};
+use super::{OutputFormat, detail_field, print_detail_table, print_json};
 
-pub fn print_profile_detail(p: &PublicProfile) {
+pub fn print_profile(p: &PublicProfile, output: &OutputFormat) -> anyhow::Result<()> {
+    if matches!(output, OutputFormat::Json) {
+        return print_json(p);
+    }
     let mut rows: Vec<[String; 2]> = Vec::new();
 
     detail_field!(rows, "Name", p.name.clone().unwrap_or_default());
@@ -38,4 +41,5 @@ pub fn print_profile_detail(p: &PublicProfile) {
     );
 
     print_detail_table(rows);
+    Ok(())
 }

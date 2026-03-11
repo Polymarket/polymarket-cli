@@ -2,7 +2,10 @@ use polymarket_client_sdk::gamma::types::response::Series;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{detail_field, format_decimal, print_detail_table, truncate};
+use super::{
+    DASH, OutputFormat, active_status, detail_field, format_date, format_decimal,
+    print_detail_table, print_json, truncate,
+};
 
 #[derive(Tabled)]
 struct SeriesRow {
@@ -18,37 +21,36 @@ struct SeriesRow {
     status: String,
 }
 
-fn series_status(s: &Series) -> &'static str {
-    if s.closed == Some(true) {
-        "Closed"
-    } else if s.active == Some(true) {
-        "Active"
-    } else {
-        "Inactive"
-    }
-}
-
 fn series_to_row(s: &Series) -> SeriesRow {
     SeriesRow {
-        title: truncate(s.title.as_deref().unwrap_or("—"), 50),
-        series_type: s.series_type.as_deref().unwrap_or("—").into(),
-        volume: s.volume.map_or_else(|| "—".into(), format_decimal),
-        liquidity: s.liquidity.map_or_else(|| "—".into(), format_decimal),
-        status: series_status(s).into(),
+        title: truncate(s.title.as_deref().unwrap_or(DASH), 50),
+        series_type: s.series_type.as_deref().unwrap_or(DASH).into(),
+        volume: s.volume.map_or_else(|| DASH.into(), format_decimal),
+        liquidity: s.liquidity.map_or_else(|| DASH.into(), format_decimal),
+        status: active_status(s.closed, s.active).into(),
     }
 }
 
-pub fn print_series_table(series: &[Series]) {
-    if series.is_empty() {
-        println!("No series found.");
-        return;
+pub fn print_series(series: &[Series], output: &OutputFormat) -> anyhow::Result<()> {
+    match output {
+        OutputFormat::Table => {
+            if series.is_empty() {
+                println!("No series found.");
+                return Ok(());
+            }
+            let rows: Vec<SeriesRow> = series.iter().map(series_to_row).collect();
+            let table = Table::new(rows).with(Style::rounded()).to_string();
+            println!("{table}");
+        }
+        OutputFormat::Json => print_json(series)?,
     }
-    let rows: Vec<SeriesRow> = series.iter().map(series_to_row).collect();
-    let table = Table::new(rows).with(Style::rounded()).to_string();
-    println!("{table}");
+    Ok(())
 }
 
-pub fn print_series_detail(s: &Series) {
+pub fn print_series_item(s: &Series, output: &OutputFormat) -> anyhow::Result<()> {
+    if matches!(output, OutputFormat::Json) {
+        return print_json(s);
+    }
     let mut rows: Vec<[String; 2]> = Vec::new();
 
     detail_field!(rows, "ID", s.id.clone());
@@ -76,7 +78,7 @@ pub fn print_series_detail(s: &Series) {
         "Volume (24hr)",
         s.volume_24hr.map(format_decimal).unwrap_or_default()
     );
-    detail_field!(rows, "Status", series_status(s).into());
+    detail_field!(rows, "Status", active_status(s.closed, s.active).into());
     detail_field!(
         rows,
         "Events",
@@ -93,12 +95,12 @@ pub fn print_series_detail(s: &Series) {
     detail_field!(
         rows,
         "Start Date",
-        s.start_date.map(|d| d.to_string()).unwrap_or_default()
+        s.start_date.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
         "Created At",
-        s.created_at.map(|d| d.to_string()).unwrap_or_default()
+        s.created_at.as_ref().map(format_date).unwrap_or_default()
     );
     detail_field!(
         rows,
@@ -115,4 +117,5 @@ pub fn print_series_detail(s: &Series) {
     );
 
     print_detail_table(rows);
+    Ok(())
 }

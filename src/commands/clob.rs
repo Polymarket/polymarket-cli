@@ -1,20 +1,5 @@
 use std::str::FromStr;
 
-use anyhow::Result;
-use chrono::NaiveDate;
-use clap::{Args, Subcommand};
-use polymarket_client_sdk::clob;
-use polymarket_client_sdk::clob::types::{
-    Amount, AssetType, Interval, OrderType, Side, TimeRange,
-    request::{
-        BalanceAllowanceRequest, CancelMarketOrderRequest, DeleteNotificationsRequest,
-        LastTradePriceRequest, MidpointRequest, OrderBookSummaryRequest, OrdersRequest,
-        PriceHistoryRequest, PriceRequest, SpreadRequest, TradesRequest, UserRewardsEarningRequest,
-    },
-};
-use polymarket_client_sdk::types::{Decimal, U256};
-
-use super::parse_condition_id;
 use crate::auth;
 use crate::output::OutputFormat;
 use crate::output::clob::{
@@ -28,6 +13,19 @@ use crate::output::clob::{
     print_rewards, print_server_time, print_simplified_markets, print_spread, print_spreads,
     print_tick_size, print_trades, print_user_earnings_markets,
 };
+use anyhow::Result;
+use chrono::NaiveDate;
+use clap::{Args, Subcommand};
+use polymarket_client_sdk::clob;
+use polymarket_client_sdk::clob::types::{
+    Amount, AssetType, Interval, OrderType, Side, TimeRange,
+    request::{
+        BalanceAllowanceRequest, CancelMarketOrderRequest, DeleteNotificationsRequest,
+        LastTradePriceRequest, MidpointRequest, OrderBookSummaryRequest, OrdersRequest,
+        PriceHistoryRequest, PriceRequest, SpreadRequest, TradesRequest, UserRewardsEarningRequest,
+    },
+};
+use polymarket_client_sdk::types::{B256, Decimal, U256};
 
 #[derive(Args)]
 pub struct ClobArgs {
@@ -183,10 +181,10 @@ pub enum ClobCommand {
     Orders {
         /// Filter by market condition ID
         #[arg(long)]
-        market: Option<String>,
+        market: Option<B256>,
         /// Filter by asset/token ID
         #[arg(long)]
-        asset: Option<String>,
+        asset: Option<U256>,
         /// Pagination cursor
         #[arg(long)]
         cursor: Option<String>,
@@ -274,20 +272,20 @@ pub enum ClobCommand {
     CancelMarket {
         /// Market condition ID
         #[arg(long)]
-        market: Option<String>,
+        market: Option<B256>,
         /// Asset/token ID
         #[arg(long)]
-        asset: Option<String>,
+        asset: Option<U256>,
     },
 
     /// List trades (authenticated)
     Trades {
         /// Filter by market condition ID
         #[arg(long)]
-        market: Option<String>,
+        market: Option<B256>,
         /// Filter by asset/token ID
         #[arg(long)]
-        asset: Option<String>,
+        asset: Option<U256>,
         /// Pagination cursor
         #[arg(long)]
         cursor: Option<String>,
@@ -300,7 +298,7 @@ pub enum ClobCommand {
         asset_type: CliAssetType,
         /// Token ID (required for conditional)
         #[arg(long)]
-        token: Option<String>,
+        token: Option<U256>,
     },
 
     /// Refresh balance allowance on-chain (authenticated)
@@ -310,7 +308,7 @@ pub enum ClobCommand {
         asset_type: CliAssetType,
         /// Token ID (required for conditional)
         #[arg(long)]
-        token: Option<String>,
+        token: Option<U256>,
     },
 
     /// List notifications (authenticated)
@@ -393,15 +391,15 @@ pub enum ClobCommand {
     AccountStatus,
 }
 
-#[derive(Clone, Debug, clap::ValueEnum)]
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum CliSide {
     Buy,
     Sell,
 }
 
 impl From<CliSide> for Side {
-    fn from(s: CliSide) -> Self {
-        match s {
+    fn from(v: CliSide) -> Self {
+        match v {
             CliSide::Buy => Side::Buy,
             CliSide::Sell => Side::Sell,
         }
@@ -424,8 +422,8 @@ pub enum CliInterval {
 }
 
 impl From<CliInterval> for Interval {
-    fn from(i: CliInterval) -> Self {
-        match i {
+    fn from(v: CliInterval) -> Self {
+        match v {
             CliInterval::OneMinute => Interval::OneMinute,
             CliInterval::OneHour => Interval::OneHour,
             CliInterval::SixHours => Interval::SixHours,
@@ -466,8 +464,8 @@ pub enum CliAssetType {
 }
 
 impl From<CliAssetType> for AssetType {
-    fn from(a: CliAssetType) -> Self {
-        match a {
+    fn from(v: CliAssetType) -> Self {
+        match v {
             CliAssetType::Collateral => AssetType::Collateral,
             CliAssetType::Conditional => AssetType::Conditional,
         }
@@ -487,232 +485,153 @@ fn parse_date(s: &str) -> Result<NaiveDate> {
         .map_err(|_| anyhow::anyhow!("Invalid date: expected YYYY-MM-DD format"))
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn execute(
     args: ClobArgs,
     output: OutputFormat,
     private_key: Option<&str>,
     signature_type: Option<&str>,
 ) -> Result<()> {
+    // Unauthenticated client — cheap to construct, used by read commands and CreateApiKey.
+    let unauth = clob::Client::default();
+    let output = &output;
+
     match args.command {
-        // Unauthenticated read commands
-        ClobCommand::Ok
-        | ClobCommand::Price { .. }
-        | ClobCommand::BatchPrices { .. }
-        | ClobCommand::Midpoint { .. }
-        | ClobCommand::Midpoints { .. }
-        | ClobCommand::Spread { .. }
-        | ClobCommand::Spreads { .. }
-        | ClobCommand::Book { .. }
-        | ClobCommand::Books { .. }
-        | ClobCommand::LastTrade { .. }
-        | ClobCommand::LastTrades { .. }
-        | ClobCommand::Market { .. }
-        | ClobCommand::Markets { .. }
-        | ClobCommand::SamplingMarkets { .. }
-        | ClobCommand::SimplifiedMarkets { .. }
-        | ClobCommand::SamplingSimpMarkets { .. }
-        | ClobCommand::TickSize { .. }
-        | ClobCommand::FeeRate { .. }
-        | ClobCommand::NegRisk { .. }
-        | ClobCommand::PriceHistory { .. }
-        | ClobCommand::Time
-        | ClobCommand::Geoblock => execute_read(args.command, &output).await,
-
-        // Authenticated trading commands
-        ClobCommand::Orders { .. }
-        | ClobCommand::Order { .. }
-        | ClobCommand::CreateOrder { .. }
-        | ClobCommand::PostOrders { .. }
-        | ClobCommand::MarketOrder { .. }
-        | ClobCommand::Cancel { .. }
-        | ClobCommand::CancelOrders { .. }
-        | ClobCommand::CancelAll
-        | ClobCommand::CancelMarket { .. }
-        | ClobCommand::Trades { .. }
-        | ClobCommand::Balance { .. }
-        | ClobCommand::UpdateBalance { .. }
-        | ClobCommand::Notifications
-        | ClobCommand::DeleteNotifications { .. } => {
-            execute_trade(args.command, &output, private_key, signature_type).await
-        }
-
-        // Authenticated reward commands
-        ClobCommand::Rewards { .. }
-        | ClobCommand::Earnings { .. }
-        | ClobCommand::EarningsMarkets { .. }
-        | ClobCommand::RewardPercentages
-        | ClobCommand::CurrentRewards { .. }
-        | ClobCommand::MarketReward { .. }
-        | ClobCommand::OrderScoring { .. }
-        | ClobCommand::OrdersScoring { .. } => {
-            execute_rewards(args.command, &output, private_key, signature_type).await
-        }
-
-        // Account management commands
-        ClobCommand::ApiKeys
-        | ClobCommand::DeleteApiKey
-        | ClobCommand::CreateApiKey
-        | ClobCommand::AccountStatus => {
-            execute_account(args.command, &output, private_key, signature_type).await
-        }
-    }
-}
-
-async fn execute_read(command: ClobCommand, output: &OutputFormat) -> Result<()> {
-    match command {
+        // ── Unauthenticated read commands ────────────────────────────────
         ClobCommand::Ok => {
-            let client = clob::Client::default();
-            let result = client.ok().await?;
+            let result = unauth.ok().await?;
             print_ok(&result, output)?;
         }
 
         ClobCommand::Price { token_id, side } => {
-            let client = clob::Client::default();
             let request = PriceRequest::builder()
                 .token_id(parse_token_id(&token_id)?)
                 .side(Side::from(side))
                 .build();
-            let result = client.price(&request).await?;
+            let result = unauth.price(&request).await?;
             print_price(&result, output)?;
         }
 
         ClobCommand::BatchPrices { token_ids, side } => {
-            let client = clob::Client::default();
             let requests: Vec<_> = parse_token_ids(&token_ids)?
                 .into_iter()
                 .map(|id| {
                     PriceRequest::builder()
                         .token_id(id)
-                        .side(Side::from(side.clone()))
+                        .side(Side::from(side))
                         .build()
                 })
                 .collect();
-            let result = client.prices(&requests).await?;
+            let result = unauth.prices(&requests).await?;
             print_batch_prices(&result, output)?;
         }
 
         ClobCommand::Midpoint { token_id } => {
-            let client = clob::Client::default();
             let request = MidpointRequest::builder()
                 .token_id(parse_token_id(&token_id)?)
                 .build();
-            let result = client.midpoint(&request).await?;
+            let result = unauth.midpoint(&request).await?;
             print_midpoint(&result, output)?;
         }
 
         ClobCommand::Midpoints { token_ids } => {
-            let client = clob::Client::default();
             let requests: Vec<_> = parse_token_ids(&token_ids)?
                 .into_iter()
                 .map(|id| MidpointRequest::builder().token_id(id).build())
                 .collect();
-            let result = client.midpoints(&requests).await?;
+            let result = unauth.midpoints(&requests).await?;
             print_midpoints(&result, output)?;
         }
 
         ClobCommand::Spread { token_id, side } => {
-            let client = clob::Client::default();
             let request = SpreadRequest::builder()
                 .token_id(parse_token_id(&token_id)?)
                 .maybe_side(side.map(Side::from))
                 .build();
-            let result = client.spread(&request).await?;
+            let result = unauth.spread(&request).await?;
             print_spread(&result, output)?;
         }
 
         ClobCommand::Spreads { token_ids } => {
-            let client = clob::Client::default();
             let requests: Vec<_> = parse_token_ids(&token_ids)?
                 .into_iter()
                 .map(|id| SpreadRequest::builder().token_id(id).build())
                 .collect();
-            let result = client.spreads(&requests).await?;
+            let result = unauth.spreads(&requests).await?;
             print_spreads(&result, output)?;
         }
 
         ClobCommand::Book { token_id } => {
-            let client = clob::Client::default();
             let request = OrderBookSummaryRequest::builder()
                 .token_id(parse_token_id(&token_id)?)
                 .build();
-            let result = client.order_book(&request).await?;
+            let result = unauth.order_book(&request).await?;
             print_order_book(&result, output)?;
         }
 
         ClobCommand::Books { token_ids } => {
-            let client = clob::Client::default();
             let requests: Vec<_> = parse_token_ids(&token_ids)?
                 .into_iter()
                 .map(|id| OrderBookSummaryRequest::builder().token_id(id).build())
                 .collect();
-            let result = client.order_books(&requests).await?;
+            let result = unauth.order_books(&requests).await?;
             print_order_books(&result, output)?;
         }
 
         ClobCommand::LastTrade { token_id } => {
-            let client = clob::Client::default();
             let request = LastTradePriceRequest::builder()
                 .token_id(parse_token_id(&token_id)?)
                 .build();
-            let result = client.last_trade_price(&request).await?;
+            let result = unauth.last_trade_price(&request).await?;
             print_last_trade(&result, output)?;
         }
 
         ClobCommand::LastTrades { token_ids } => {
-            let client = clob::Client::default();
             let requests: Vec<_> = parse_token_ids(&token_ids)?
                 .into_iter()
                 .map(|id| LastTradePriceRequest::builder().token_id(id).build())
                 .collect();
-            let result = client.last_trades_prices(&requests).await?;
+            let result = unauth.last_trades_prices(&requests).await?;
             print_last_trades_prices(&result, output)?;
         }
 
         ClobCommand::Market { condition_id } => {
-            let client = clob::Client::default();
-            let result = client.market(&condition_id).await?;
+            let result = unauth.market(&condition_id).await?;
             print_clob_market(&result, output)?;
         }
 
         ClobCommand::Markets { cursor } => {
-            let client = clob::Client::default();
-            let result = client.markets(cursor).await?;
+            let result = unauth.markets(cursor).await?;
             print_clob_markets(&result, output)?;
         }
 
         ClobCommand::SamplingMarkets { cursor } => {
-            let client = clob::Client::default();
-            let result = client.sampling_markets(cursor).await?;
+            let result = unauth.sampling_markets(cursor).await?;
             print_clob_markets(&result, output)?;
         }
 
         ClobCommand::SimplifiedMarkets { cursor } => {
-            let client = clob::Client::default();
-            let result = client.simplified_markets(cursor).await?;
+            let result = unauth.simplified_markets(cursor).await?;
             print_simplified_markets(&result, output)?;
         }
 
         ClobCommand::SamplingSimpMarkets { cursor } => {
-            let client = clob::Client::default();
-            let result = client.sampling_simplified_markets(cursor).await?;
+            let result = unauth.sampling_simplified_markets(cursor).await?;
             print_simplified_markets(&result, output)?;
         }
 
         ClobCommand::TickSize { token_id } => {
-            let client = clob::Client::default();
-            let result = client.tick_size(parse_token_id(&token_id)?).await?;
+            let result = unauth.tick_size(parse_token_id(&token_id)?).await?;
             print_tick_size(&result, output)?;
         }
 
         ClobCommand::FeeRate { token_id } => {
-            let client = clob::Client::default();
-            let result = client.fee_rate_bps(parse_token_id(&token_id)?).await?;
+            let result = unauth.fee_rate_bps(parse_token_id(&token_id)?).await?;
             print_fee_rate(&result, output)?;
         }
 
         ClobCommand::NegRisk { token_id } => {
-            let client = clob::Client::default();
-            let result = client.neg_risk(parse_token_id(&token_id)?).await?;
+            let result = unauth.neg_risk(parse_token_id(&token_id)?).await?;
             print_neg_risk(&result, output)?;
         }
 
@@ -721,61 +640,26 @@ async fn execute_read(command: ClobCommand, output: &OutputFormat) -> Result<()>
             interval,
             fidelity,
         } => {
-            let client = clob::Client::default();
             let request = PriceHistoryRequest::builder()
                 .market(parse_token_id(&token_id)?)
                 .time_range(TimeRange::from_interval(Interval::from(interval)))
                 .maybe_fidelity(fidelity)
                 .build();
-            let result = client.price_history(&request).await?;
+            let result = unauth.price_history(&request).await?;
             print_price_history(&result, output)?;
         }
 
         ClobCommand::Time => {
-            let client = clob::Client::default();
-            let result = client.server_time().await?;
+            let result = unauth.server_time().await?;
             print_server_time(result, output)?;
         }
 
         ClobCommand::Geoblock => {
-            let client = clob::Client::default();
-            let result = client.check_geoblock().await?;
+            let result = unauth.check_geoblock().await?;
             print_geoblock(&result, output)?;
         }
 
-        _ => unreachable!(),
-    }
-
-    Ok(())
-}
-
-async fn execute_trade(
-    command: ClobCommand,
-    output: &OutputFormat,
-    private_key: Option<&str>,
-    signature_type: Option<&str>,
-) -> Result<()> {
-    match command {
-        ClobCommand::Orders {
-            market,
-            asset,
-            cursor,
-        } => {
-            let client = auth::authenticated_clob_client(private_key, signature_type).await?;
-            let request = OrdersRequest::builder()
-                .maybe_market(market.map(|m| parse_condition_id(&m)).transpose()?)
-                .maybe_asset_id(asset.map(|a| parse_token_id(&a)).transpose()?)
-                .build();
-            let result = client.orders(&request, cursor).await?;
-            print_orders(&result, output)?;
-        }
-
-        ClobCommand::Order { order_id } => {
-            let client = auth::authenticated_clob_client(private_key, signature_type).await?;
-            let result = client.order(&order_id).await?;
-            print_order_detail(&result, output)?;
-        }
-
+        // ── Authenticated trading commands (need signer for order signing) ──
         ClobCommand::CreateOrder {
             token,
             side,
@@ -886,6 +770,27 @@ async fn execute_trade(
             print_post_order_result(&result, output)?;
         }
 
+        // ── Authenticated trading commands (no signer needed) ───────────
+        ClobCommand::Orders {
+            market,
+            asset,
+            cursor,
+        } => {
+            let client = auth::authenticated_clob_client(private_key, signature_type).await?;
+            let request = OrdersRequest::builder()
+                .maybe_market(market)
+                .maybe_asset_id(asset)
+                .build();
+            let result = client.orders(&request, cursor).await?;
+            print_orders(&result, output)?;
+        }
+
+        ClobCommand::Order { order_id } => {
+            let client = auth::authenticated_clob_client(private_key, signature_type).await?;
+            let result = client.order(&order_id).await?;
+            print_order_detail(&result, output)?;
+        }
+
         ClobCommand::Cancel { order_id } => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let result = client.cancel_order(&order_id).await?;
@@ -908,8 +813,8 @@ async fn execute_trade(
         ClobCommand::CancelMarket { market, asset } => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let request = CancelMarketOrderRequest::builder()
-                .maybe_market(market.map(|m| parse_condition_id(&m)).transpose()?)
-                .maybe_asset_id(asset.map(|a| parse_token_id(&a)).transpose()?)
+                .maybe_market(market)
+                .maybe_asset_id(asset)
                 .build();
             let result = client.cancel_market_orders(&request).await?;
             print_cancel_result(&result, output)?;
@@ -922,19 +827,19 @@ async fn execute_trade(
         } => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let request = TradesRequest::builder()
-                .maybe_market(market.map(|m| parse_condition_id(&m)).transpose()?)
-                .maybe_asset_id(asset.map(|a| parse_token_id(&a)).transpose()?)
+                .maybe_market(market)
+                .maybe_asset_id(asset)
                 .build();
             let result = client.trades(&request, cursor).await?;
             print_trades(&result, output)?;
         }
 
         ClobCommand::Balance { asset_type, token } => {
-            let is_collateral = matches!(asset_type, CliAssetType::Collateral);
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
+            let is_collateral = matches!(asset_type, CliAssetType::Collateral);
             let request = BalanceAllowanceRequest::builder()
                 .asset_type(AssetType::from(asset_type))
-                .maybe_token_id(token.map(|t| parse_token_id(&t)).transpose()?)
+                .maybe_token_id(token)
                 .build();
             let result = client.balance_allowance(request).await?;
             print_balance(&result, is_collateral, output)?;
@@ -944,7 +849,7 @@ async fn execute_trade(
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let request = BalanceAllowanceRequest::builder()
                 .asset_type(AssetType::from(asset_type))
-                .maybe_token_id(token.map(|t| parse_token_id(&t)).transpose()?)
+                .maybe_token_id(token)
                 .build();
             client.update_balance_allowance(request).await?;
             match output {
@@ -977,19 +882,7 @@ async fn execute_trade(
             }
         }
 
-        _ => unreachable!(),
-    }
-
-    Ok(())
-}
-
-async fn execute_rewards(
-    command: ClobCommand,
-    output: &OutputFormat,
-    private_key: Option<&str>,
-    signature_type: Option<&str>,
-) -> Result<()> {
-    match command {
+        // ── Authenticated reward commands ────────────────────────────────
         ClobCommand::Rewards { date, cursor } => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let result = client
@@ -1051,19 +944,13 @@ async fn execute_rewards(
             print_orders_scoring(&result, output)?;
         }
 
-        _ => unreachable!(),
-    }
+        // ── Account management commands ──────────────────────────────────
+        ClobCommand::CreateApiKey => {
+            let signer = auth::resolve_signer(private_key)?;
+            let result = unauth.create_or_derive_api_key(&signer, None).await?;
+            print_create_api_key(&result, output)?;
+        }
 
-    Ok(())
-}
-
-async fn execute_account(
-    command: ClobCommand,
-    output: &OutputFormat,
-    private_key: Option<&str>,
-    signature_type: Option<&str>,
-) -> Result<()> {
-    match command {
         ClobCommand::ApiKeys => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let result = client.api_keys().await?;
@@ -1076,20 +963,11 @@ async fn execute_account(
             print_delete_api_key(&result, output)?;
         }
 
-        ClobCommand::CreateApiKey => {
-            let signer = auth::resolve_signer(private_key)?;
-            let client = clob::Client::default();
-            let result = client.create_or_derive_api_key(&signer, None).await?;
-            print_create_api_key(&result, output)?;
-        }
-
         ClobCommand::AccountStatus => {
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
             let result = client.closed_only_mode().await?;
             print_account_status(&result, output)?;
         }
-
-        _ => unreachable!(),
     }
 
     Ok(())

@@ -1,29 +1,32 @@
-pub mod approve;
-pub mod bridge;
-pub mod clob;
-pub mod comments;
-pub mod ctf;
-pub mod data;
-pub mod events;
-pub mod markets;
-pub mod profiles;
-pub mod series;
-pub mod sports;
-pub mod tags;
+pub(crate) mod approve;
+pub(crate) mod bridge;
+pub(crate) mod clob;
+pub(crate) mod comments;
+pub(crate) mod ctf;
+pub(crate) mod data;
+pub(crate) mod events;
+pub(crate) mod markets;
+pub(crate) mod profiles;
+pub(crate) mod series;
+pub(crate) mod sports;
+pub(crate) mod tags;
 
+use chrono::{DateTime, Utc};
 use polymarket_client_sdk::types::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use tabled::Table;
 use tabled::settings::object::Columns;
 use tabled::settings::{Modify, Style, Width};
 
+pub(crate) const DASH: &str = "—";
+
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
-pub enum OutputFormat {
+pub(crate) enum OutputFormat {
     Table,
     Json,
 }
 
-pub fn truncate(s: &str, max: usize) -> String {
+pub(crate) fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
     }
@@ -32,23 +35,50 @@ pub fn truncate(s: &str, max: usize) -> String {
     truncated
 }
 
-pub fn format_decimal(n: Decimal) -> String {
+pub(crate) fn format_decimal(n: Decimal) -> String {
     let f = n.to_f64().unwrap_or(0.0);
-    if f >= 1_000_000.0 {
-        format!("${:.1}M", f / 1_000_000.0)
-    } else if f >= 1_000.0 {
-        format!("${:.1}K", f / 1_000.0)
+    let abs = f.abs();
+    let sign = if f < 0.0 { "-" } else { "" };
+    if abs >= 1_000_000.0 {
+        format!("{sign}${:.1}M", abs / 1_000_000.0)
+    } else if abs >= 1_000.0 {
+        format!("{sign}${:.1}K", abs / 1_000.0)
     } else {
-        format!("${f:.2}")
+        format!("{sign}${abs:.2}")
     }
 }
 
-pub fn print_json(data: &impl serde::Serialize) -> anyhow::Result<()> {
+pub(crate) fn format_date(d: &DateTime<Utc>) -> String {
+    d.format("%Y-%m-%d %H:%M UTC").to_string()
+}
+
+pub(crate) fn active_status(closed: Option<bool>, active: Option<bool>) -> &'static str {
+    if closed == Some(true) {
+        "Closed"
+    } else if active == Some(true) {
+        "Active"
+    } else {
+        "Inactive"
+    }
+}
+
+pub(crate) fn print_json(data: &(impl serde::Serialize + ?Sized)) -> anyhow::Result<()> {
     println!("{}", serde_json::to_string_pretty(data)?);
     Ok(())
 }
 
-pub fn print_detail_table(rows: Vec<[String; 2]>) {
+pub(crate) fn print_error(error: &anyhow::Error, format: OutputFormat) {
+    match format {
+        OutputFormat::Json => {
+            println!("{}", serde_json::json!({"error": error.to_string()}));
+        }
+        OutputFormat::Table => {
+            eprintln!("Error: {error}");
+        }
+    }
+}
+
+pub(crate) fn print_detail_table(rows: Vec<[String; 2]>) {
     let table = Table::from_iter(rows)
         .with(Style::rounded())
         .with(Modify::new(Columns::first()).with(Width::wrap(20)))
@@ -143,7 +173,12 @@ mod tests {
 
     #[test]
     fn format_decimal_negative() {
-        assert_eq!(format_decimal(dec!(-500)), "$-500.00");
+        assert_eq!(format_decimal(dec!(-500)), "-$500.00");
+    }
+
+    #[test]
+    fn format_decimal_negative_thousands() {
+        assert_eq!(format_decimal(dec!(-1_500)), "-$1.5K");
     }
 
     #[test]

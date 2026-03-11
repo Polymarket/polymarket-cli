@@ -1,20 +1,12 @@
-use clap::Parser;
+use clap::Parser as _;
 
-use crate::output::OutputFormat;
-
-pub async fn run_shell() {
+pub async fn run_shell() -> anyhow::Result<()> {
     println!();
     println!("  Polymarket CLI · Interactive Shell");
     println!("  Type 'help' for commands, 'exit' to quit.");
     println!();
 
-    let mut rl = match rustyline::DefaultEditor::new() {
-        Ok(rl) => rl,
-        Err(e) => {
-            eprintln!("Failed to initialize shell: {e}");
-            return;
-        }
-    };
+    let mut rl = rustyline::DefaultEditor::new()?;
 
     loop {
         match rl.readline("polymarket> ") {
@@ -48,14 +40,7 @@ pub async fn run_shell() {
                     Ok(cli) => {
                         let output = cli.output;
                         if let Err(e) = crate::run(cli).await {
-                            match output {
-                                OutputFormat::Json => {
-                                    println!("{}", serde_json::json!({"error": e.to_string()}));
-                                }
-                                OutputFormat::Table => {
-                                    eprintln!("Error: {e}");
-                                }
-                            }
+                            crate::output::print_error(&e, output);
                         }
                     }
                     Err(e) => {
@@ -73,6 +58,7 @@ pub async fn run_shell() {
     }
 
     println!("Goodbye!");
+    Ok(())
 }
 
 fn split_args(input: &str) -> Vec<String> {

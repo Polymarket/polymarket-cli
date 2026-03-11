@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
@@ -55,7 +54,7 @@ pub enum WalletCommand {
 
 pub fn execute(
     args: WalletArgs,
-    output: &OutputFormat,
+    output: OutputFormat,
     private_key_flag: Option<&str>,
 ) -> Result<()> {
     match args.command {
@@ -84,15 +83,7 @@ fn guard_overwrite(force: bool) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn normalize_key(key: &str) -> String {
-    if key.starts_with("0x") || key.starts_with("0X") {
-        key.to_string()
-    } else {
-        format!("0x{key}")
-    }
-}
-
-fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Result<()> {
+fn cmd_create(output: OutputFormat, force: bool, signature_type: &str) -> Result<()> {
     guard_overwrite(force)?;
 
     let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
@@ -139,11 +130,10 @@ fn cmd_create(output: &OutputFormat, force: bool, signature_type: &str) -> Resul
     Ok(())
 }
 
-fn cmd_import(key: &str, output: &OutputFormat, force: bool, signature_type: &str) -> Result<()> {
+fn cmd_import(key: &str, output: OutputFormat, force: bool, signature_type: &str) -> Result<()> {
     guard_overwrite(force)?;
 
-    let normalized = normalize_key(key);
-    let signer = LocalSigner::from_str(&normalized)
+    let signer = LocalSigner::from_str(key)
         .context("Invalid private key")?
         .with_chain_id(Some(POLYGON));
     let address = signer.address();
@@ -219,7 +209,7 @@ fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()>
         .and_then(|s| derive_proxy_wallet(s.address(), POLYGON))
         .map(|a| a.to_string());
 
-    let sig_type = config::resolve_signature_type(None);
+    let sig_type = config::resolve_signature_type(None)?;
     let config_path = config::config_path()?;
 
     match output {
@@ -317,29 +307,4 @@ fn cmd_reset(output: &OutputFormat, force: bool) -> Result<()> {
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_key_adds_prefix() {
-        assert_eq!(
-            normalize_key("abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"),
-            "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-        );
-    }
-
-    #[test]
-    fn normalize_key_with_prefix_unchanged() {
-        let key = "0xabcdef";
-        assert_eq!(normalize_key(key), key);
-    }
-
-    #[test]
-    fn normalize_key_uppercase_prefix() {
-        let key = "0Xabcdef";
-        assert_eq!(normalize_key(key), key);
-    }
 }

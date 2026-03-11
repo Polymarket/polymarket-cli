@@ -1,5 +1,3 @@
-#![allow(clippy::items_after_statements)]
-
 use polymarket_client_sdk::data::types::response::{
     Activity, BuilderLeaderboardEntry, BuilderVolumeEntry, ClosedPosition, LiveVolume, Market,
     MetaHolder, OpenInterest, Position, Trade, Traded, TraderLeaderboardEntry, Value,
@@ -8,7 +6,7 @@ use serde_json::json;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 
-use super::{OutputFormat, format_decimal, truncate};
+use super::{DASH, OutputFormat, format_decimal, truncate};
 
 fn format_market(m: &Market) -> String {
     match m {
@@ -272,7 +270,7 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
                 .iter()
                 .map(|a| Row {
                     activity_type: a.activity_type.to_string(),
-                    title: truncate(a.title.as_deref().unwrap_or("—"), 35),
+                    title: truncate(a.title.as_deref().unwrap_or(DASH), 35),
                     size: format!("{:.2}", a.size),
                     usdc_size: format_decimal(a.usdc_size),
                     tx: truncate(&a.transaction_hash.to_string(), 14),
@@ -329,7 +327,7 @@ pub fn print_holders(meta_holders: &[MetaHolder], output: &OutputFormat) -> anyh
                             .name
                             .as_deref()
                             .or(h.pseudonym.as_deref())
-                            .unwrap_or("—")
+                            .unwrap_or(DASH)
                             .into(),
                         amount: format_decimal(h.amount),
                         outcome_index: h.outcome_index.to_string(),
@@ -471,7 +469,7 @@ pub fn print_leaderboard(
                 .iter()
                 .map(|e| Row {
                     rank: e.rank.to_string(),
-                    trader: truncate(e.user_name.as_deref().unwrap_or("—"), 20),
+                    trader: truncate(e.user_name.as_deref().unwrap_or(DASH), 20),
                     pnl: format_decimal(e.pnl),
                     volume: format_decimal(e.vol),
                 })

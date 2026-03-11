@@ -1,6 +1,6 @@
 [package]
 name = "polymarket-cli"
-version = "0.1.0"
+version = "0.1.4"
 edition = "2024"
 rust-version = "1.88.0"
 description = "CLI for Polymarket — browse markets, trade, and manage positions"

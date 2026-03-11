@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::io::{self, BufRead, Write};
 use std::str::FromStr;
 
@@ -8,7 +7,6 @@ use polymarket_client_sdk::types::Address;
 use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
 use secrecy::{ExposeSecret, SecretString};
 
-use super::wallet::normalize_key;
 use crate::config;
 
 fn print_banner() {
@@ -135,8 +133,7 @@ fn setup_wallet() -> Result<Address> {
 
     let (address, key_hex) = if has_key {
         let key = prompt("  Enter private key: ")?;
-        let normalized = normalize_key(&key);
-        let signer = LocalSigner::from_str(&normalized)
+        let signer = LocalSigner::from_str(&key)
             .context("Invalid private key")?
             .with_chain_id(Some(POLYGON));
         (signer.address(), SecretString::from(normalized))
