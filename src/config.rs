@@ -108,7 +108,7 @@ pub fn keystore_exists() -> bool {
 
 /// Returns true if old-format config has a plaintext private_key field but no keystore.
 pub fn needs_migration() -> bool {
-    load_config().is_some_and(|c| !c.private_key.is_empty())
+    load_config().ok().flatten().is_some_and(|c| !c.private_key.is_empty())
         && !keystore_exists()
 }
 
@@ -179,7 +179,7 @@ pub fn load_key_encrypted(password: &str) -> Result<SecretString> {
 
 /// Migrate old plaintext config to encrypted keystore.
 pub fn migrate_to_encrypted(password: &SecretString) -> Result<()> {
-    let config = load_config()
+    let config = load_config()?
         .ok_or_else(|| anyhow::anyhow!("No config file found to migrate"))?;
 
     if config.private_key.is_empty() {
@@ -238,10 +238,10 @@ pub fn resolve_key(cli_flag: Option<&str>) -> (Option<SecretString>, KeySource) 
     {
         return (Some(SecretString::from(key)), KeySource::EnvVar);
     }
-    if let Some(config) = load_config() {
+    if let Ok(Some(config)) = load_config() {
         return (Some(SecretString::from(config.private_key)), KeySource::ConfigFile);
     }
-    Ok((None, KeySource::None))
+    (None, KeySource::None)
 }
 
 #[cfg(test)]
@@ -285,7 +285,7 @@ mod tests {
     fn resolve_key_skips_empty_env_var() {
         let _lock = ENV_LOCK.lock().unwrap();
         unsafe { set(ENV_VAR, "") };
-        let (_, source) = resolve_key(None).unwrap();
+        let (_, source) = resolve_key(None);
         assert!(!matches!(source, KeySource::EnvVar));
         unsafe { unset(ENV_VAR) };
     }

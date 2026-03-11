@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
@@ -67,10 +68,10 @@ pub fn execute(
             force,
             signature_type,
         } => cmd_import(&key, output, force, &signature_type),
-        WalletCommand::Address => cmd_address(output, private_key_flag),
-        WalletCommand::Show => cmd_show(output, private_key_flag),
-        WalletCommand::Reset { force } => cmd_reset(output, force),
-        WalletCommand::Export => cmd_export(output),
+        WalletCommand::Address => cmd_address(&output, private_key_flag),
+        WalletCommand::Show => cmd_show(&output, private_key_flag),
+        WalletCommand::Reset { force } => cmd_reset(&output, force),
+        WalletCommand::Export => cmd_export(&output),
     }
 }
 
@@ -137,10 +138,16 @@ fn cmd_import(key: &str, output: OutputFormat, force: bool, signature_type: &str
         .context("Invalid private key")?
         .with_chain_id(Some(POLYGON));
     let address = signer.address();
-    let normalized = SecretString::from(normalized);
+    let bytes = signer.credential().to_bytes();
+    let mut hex = String::with_capacity(2 + bytes.len() * 2);
+    hex.push_str("0x");
+    for b in &bytes {
+        write!(hex, "{b:02x}").unwrap();
+    }
+    let key_hex = SecretString::from(hex);
 
     let password = crate::password::prompt_new_password()?;
-    config::save_key_encrypted(&normalized, &password)?;
+    config::save_key_encrypted(&key_hex, &password)?;
     config::save_wallet_settings(POLYGON, signature_type)?;
     let config_path = config::config_path()?;
     let proxy_addr = derive_proxy_wallet(address, POLYGON);

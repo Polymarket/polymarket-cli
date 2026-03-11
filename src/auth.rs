@@ -46,7 +46,7 @@ pub(crate) fn resolve_key_string(private_key: Option<&str>) -> Result<SecretStri
         return config::load_key_encrypted(password.expose_secret());
     }
     // 3. Old config (plaintext — for backward compat)
-    if let Some(cfg) = config::load_config()
+    if let Ok(Some(cfg)) = config::load_config()
         && !cfg.private_key.is_empty()
     {
         return Ok(SecretString::from(cfg.private_key));

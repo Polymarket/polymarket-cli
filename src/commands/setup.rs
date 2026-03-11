@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::io::{self, BufRead, Write};
 use std::str::FromStr;
 
@@ -136,7 +137,13 @@ fn setup_wallet() -> Result<Address> {
         let signer = LocalSigner::from_str(&key)
             .context("Invalid private key")?
             .with_chain_id(Some(POLYGON));
-        (signer.address(), SecretString::from(normalized))
+        let bytes = signer.credential().to_bytes();
+        let mut hex = String::with_capacity(2 + bytes.len() * 2);
+        hex.push_str("0x");
+        for b in &bytes {
+            write!(hex, "{b:02x}").unwrap();
+        }
+        (signer.address(), SecretString::from(hex))
     } else {
         let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
         let address = signer.address();
