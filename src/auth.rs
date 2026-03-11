@@ -1,13 +1,16 @@
 use std::str::FromStr;
 
-use alloy::providers::ProviderBuilder;
-use anyhow::{Context, Result};
+use alloy::primitives::B256;
+use alloy::providers::{Provider, ProviderBuilder};
+use anyhow::{Context, Result, bail};
 use polymarket_client_sdk::auth::state::Authenticated;
 use polymarket_client_sdk::auth::{LocalSigner, Normal, Signer as _};
 use polymarket_client_sdk::clob::types::SignatureType;
+use polymarket_client_sdk::types::Address;
 use polymarket_client_sdk::{POLYGON, clob};
 
-use crate::config;
+use crate::config::{self, SignerType};
+use crate::cwp::{CwpSigner, PolySigner};
 
 const DEFAULT_RPC_URL: &str = "https://polygon.drpc.org";
 
@@ -23,14 +26,33 @@ fn parse_signature_type(s: &str) -> SignatureType {
     }
 }
 
-pub fn resolve_signer(
-    private_key: Option<&str>,
-) -> Result<impl polymarket_client_sdk::auth::Signer> {
-    let (key, _) = config::resolve_key(private_key)?;
-    let key = key.ok_or_else(|| anyhow::anyhow!("{}", config::NO_WALLET_MSG))?;
-    LocalSigner::from_str(&key)
-        .context("Invalid private key")
-        .map(|s| s.with_chain_id(Some(POLYGON)))
+pub fn resolve_signer(private_key: Option<&str>) -> Result<PolySigner> {
+    // CLI flag or env var always uses local signer
+    let (key, _source) = config::resolve_key(private_key)?;
+    if let Some(key) = key {
+        let signer = LocalSigner::from_str(&key)
+            .context("Invalid private key")?
+            .with_chain_id(Some(POLYGON));
+        return Ok(PolySigner::Local(signer));
+    }
+
+    // Check config for CWP
+    if let Some(cfg) = config::load_config()? {
+        if cfg.signer_type == SignerType::Cwp {
+            let provider = cfg
+                .cwp_provider
+                .context("CWP provider not configured")?;
+            let address: alloy::primitives::Address = cfg
+                .cwp_address
+                .context("CWP address not configured")?
+                .parse()
+                .context("Invalid CWP address in config")?;
+            let signer = CwpSigner::new(&provider, address, Some(POLYGON));
+            return Ok(PolySigner::Cwp(signer));
+        }
+    }
+
+    bail!("{}", config::NO_WALLET_MSG)
 }
 
 pub async fn authenticated_clob_client(
@@ -66,7 +88,17 @@ pub async fn create_provider(
     private_key: Option<&str>,
 ) -> Result<impl alloy::providers::Provider + Clone> {
     let (key, _) = config::resolve_key(private_key)?;
-    let key = key.ok_or_else(|| anyhow::anyhow!("{}", config::NO_WALLET_MSG))?;
+    let key = key.ok_or_else(|| {
+        // Check if CWP wallet is configured — give a better error message
+        if let Some(cfg) = config::load_config().ok().flatten() {
+            if cfg.signer_type == SignerType::Cwp {
+                return anyhow::anyhow!(
+                    "CTF operations require a local wallet. Use `polymarket wallet` to configure one."
+                );
+            }
+        }
+        anyhow::anyhow!("{}", config::NO_WALLET_MSG)
+    })?;
     let signer = LocalSigner::from_str(&key)
         .context("Invalid private key")?
         .with_chain_id(Some(POLYGON));
@@ -75,6 +107,33 @@ pub async fn create_provider(
         .connect(&rpc_url())
         .await
         .context("Failed to connect to Polygon RPC with wallet")
+}
+
+pub async fn send_and_confirm_cwp_tx(
+    cwp_signer: &CwpSigner,
+    provider: &(impl Provider + Sync),
+    to: Address,
+    calldata: Vec<u8>,
+) -> Result<B256> {
+    // Send via CWP wallet (wallet handles gas estimation)
+    let tx_hash = cwp_signer
+        .send_transaction(to, calldata, alloy::primitives::U256::ZERO, None)
+        .await
+        .context("CWP send-transaction failed")?;
+
+    // Wait for on-chain confirmation (poll every 2s, timeout at 2 min)
+    for i in 0..60 {
+        if i > 0 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+        if let Some(receipt) = provider.get_transaction_receipt(tx_hash).await? {
+            if !receipt.status() {
+                bail!("Transaction {tx_hash} reverted on-chain");
+            }
+            return Ok(tx_hash);
+        }
+    }
+    bail!("Transaction {tx_hash} not confirmed after 2 minutes")
 }
 
 #[cfg(test)]

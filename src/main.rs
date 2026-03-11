@@ -1,6 +1,7 @@
 mod auth;
 mod commands;
 mod config;
+mod cwp;
 mod output;
 mod shell;
 

@@ -3,12 +3,14 @@
 
 use alloy::primitives::U256;
 use alloy::sol;
+use alloy::sol_types::SolCall;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::types::{Address, address};
 use polymarket_client_sdk::{POLYGON, contract_config};
 
 use crate::auth;
+use crate::cwp::PolySigner;
 use crate::output::OutputFormat;
 use crate::output::approve::{ApprovalStatus, print_approval_status, print_tx_result};
 
@@ -135,13 +137,30 @@ async fn check(
     print_approval_status(&statuses, &output)
 }
 
+struct TxStep<'a> {
+    step: usize,
+    total: usize,
+    label: &'a str,
+    token_type: &'static str,
+    contract_name: &'a str,
+    tx_hash: alloy::primitives::B256,
+}
+
+fn emit_result(output: &OutputFormat, results: &mut Vec<serde_json::Value>, tx: &TxStep<'_>) {
+    match output {
+        OutputFormat::Table => print_tx_result(tx.step, tx.total, tx.label, tx.tx_hash),
+        OutputFormat::Json => results.push(serde_json::json!({
+            "step": tx.step,
+            "type": tx.token_type,
+            "contract": tx.contract_name,
+            "tx_hash": format!("{}", tx.tx_hash),
+        })),
+    }
+}
+
 async fn set(private_key: Option<&str>, output: OutputFormat) -> Result<()> {
-    let provider = auth::create_provider(private_key).await?;
+    let signer = auth::resolve_signer(private_key)?;
     let config = contract_config(POLYGON, false).context("No contract config for Polygon")?;
-
-    let usdc = IERC20::new(USDC_ADDRESS, provider.clone());
-    let ctf = IERC1155::new(config.conditional_tokens, provider.clone());
-
     let targets = approval_targets()?;
     let total = targets.len() * 2;
 
@@ -152,53 +171,76 @@ async fn set(private_key: Option<&str>, output: OutputFormat) -> Result<()> {
     let mut results: Vec<serde_json::Value> = Vec::new();
     let mut step = 0;
 
-    for target in &targets {
-        step += 1;
-        let label = format!("USDC \u{2192} {}", target.name);
-        let tx_hash = usdc
-            .approve(target.address, U256::MAX)
-            .send()
-            .await
-            .context(format!("Failed to send USDC approval for {}", target.name))?
-            .watch()
-            .await
-            .context(format!(
-                "Failed to confirm USDC approval for {}",
-                target.name
-            ))?;
+    match &signer {
+        PolySigner::Local(_) => {
+            let provider = auth::create_provider(private_key).await?;
+            let usdc = IERC20::new(USDC_ADDRESS, provider.clone());
+            let ctf = IERC1155::new(config.conditional_tokens, provider.clone());
 
-        match output {
-            OutputFormat::Table => print_tx_result(step, total, &label, tx_hash),
-            OutputFormat::Json => results.push(serde_json::json!({
-                "step": step,
-                "type": "erc20",
-                "contract": target.name,
-                "tx_hash": format!("{tx_hash}"),
-            })),
+            for target in &targets {
+                step += 1;
+                let label = format!("USDC \u{2192} {}", target.name);
+                let tx_hash = usdc
+                    .approve(target.address, U256::MAX)
+                    .send()
+                    .await
+                    .context(format!("Failed to send USDC approval for {}", target.name))?
+                    .watch()
+                    .await
+                    .context(format!(
+                        "Failed to confirm USDC approval for {}",
+                        target.name
+                    ))?;
+                emit_result(&output, &mut results, &TxStep { step, total, label: &label, token_type: "erc20", contract_name: target.name, tx_hash });
+
+                step += 1;
+                let label = format!("CTF  \u{2192} {}", target.name);
+                let tx_hash = ctf
+                    .setApprovalForAll(target.address, true)
+                    .send()
+                    .await
+                    .context(format!("Failed to send CTF approval for {}", target.name))?
+                    .watch()
+                    .await
+                    .context(format!(
+                        "Failed to confirm CTF approval for {}",
+                        target.name
+                    ))?;
+                emit_result(&output, &mut results, &TxStep { step, total, label: &label, token_type: "erc1155", contract_name: target.name, tx_hash });
+            }
         }
+        PolySigner::Cwp(cwp_signer) => {
+            let provider = auth::create_readonly_provider().await?;
+            for target in &targets {
+                step += 1;
+                let label = format!("USDC \u{2192} {}", target.name);
+                let calldata = IERC20::approveCall {
+                    spender: target.address,
+                    value: U256::MAX,
+                }
+                .abi_encode();
+                let tx_hash = auth::send_and_confirm_cwp_tx(cwp_signer, &provider, USDC_ADDRESS, calldata)
+                    .await
+                    .context(format!("Failed USDC approval for {}", target.name))?;
+                emit_result(&output, &mut results, &TxStep { step, total, label: &label, token_type: "erc20", contract_name: target.name, tx_hash });
 
-        step += 1;
-        let label = format!("CTF  \u{2192} {}", target.name);
-        let tx_hash = ctf
-            .setApprovalForAll(target.address, true)
-            .send()
-            .await
-            .context(format!("Failed to send CTF approval for {}", target.name))?
-            .watch()
-            .await
-            .context(format!(
-                "Failed to confirm CTF approval for {}",
-                target.name
-            ))?;
-
-        match output {
-            OutputFormat::Table => print_tx_result(step, total, &label, tx_hash),
-            OutputFormat::Json => results.push(serde_json::json!({
-                "step": step,
-                "type": "erc1155",
-                "contract": target.name,
-                "tx_hash": format!("{tx_hash}"),
-            })),
+                step += 1;
+                let label = format!("CTF  \u{2192} {}", target.name);
+                let calldata = IERC1155::setApprovalForAllCall {
+                    operator: target.address,
+                    approved: true,
+                }
+                .abi_encode();
+                let tx_hash = auth::send_and_confirm_cwp_tx(
+                    cwp_signer,
+                    &provider,
+                    config.conditional_tokens,
+                    calldata,
+                )
+                .await
+                .context(format!("Failed CTF approval for {}", target.name))?;
+                emit_result(&output, &mut results, &TxStep { step, total, label: &label, token_type: "erc1155", contract_name: target.name, tx_hash });
+            }
         }
     }
 
