@@ -153,10 +153,20 @@ pub fn save_key_encrypted(key_hex: &SecretString, password: &SecretString) -> Re
     Ok(())
 }
 
-/// Decrypt keystore.json and return the private key as 0x-prefixed hex.
-pub fn load_key_encrypted(password: &str) -> Result<SecretString> {
+/// Convert raw key bytes to a 0x-prefixed hex SecretString.
+pub(crate) fn key_bytes_to_hex(bytes: &[u8]) -> SecretString {
     use std::fmt::Write as _;
 
+    let mut hex = String::with_capacity(2 + bytes.len() * 2);
+    hex.push_str("0x");
+    for b in bytes {
+        write!(hex, "{b:02x}").unwrap();
+    }
+    SecretString::from(hex)
+}
+
+/// Decrypt keystore.json and return the private key as 0x-prefixed hex.
+pub fn load_key_encrypted(password: &str) -> Result<SecretString> {
     let path = keystore_path()?;
     let signer = alloy::signers::local::LocalSigner::decrypt_keystore(&path, password)
         .map_err(|e| {
@@ -168,13 +178,7 @@ pub fn load_key_encrypted(password: &str) -> Result<SecretString> {
             }
         })?;
 
-    let bytes = signer.credential().to_bytes();
-    let mut hex = String::with_capacity(2 + bytes.len() * 2);
-    hex.push_str("0x");
-    for b in &bytes {
-        write!(hex, "{b:02x}").unwrap();
-    }
-    Ok(SecretString::from(hex))
+    Ok(key_bytes_to_hex(&signer.credential().to_bytes()))
 }
 
 /// Migrate old plaintext config to encrypted keystore.

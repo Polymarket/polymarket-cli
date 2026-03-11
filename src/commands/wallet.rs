@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
@@ -6,7 +5,7 @@ use clap::{Args, Subcommand};
 use polymarket_client_sdk::auth::LocalSigner;
 use polymarket_client_sdk::auth::Signer as _;
 use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 
 use crate::config;
 use crate::output::OutputFormat;
@@ -89,13 +88,7 @@ fn cmd_create(output: OutputFormat, force: bool, signature_type: &str) -> Result
 
     let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
     let address = signer.address();
-    let bytes = signer.credential().to_bytes();
-    let mut hex = String::with_capacity(2 + bytes.len() * 2);
-    hex.push_str("0x");
-    for b in &bytes {
-        write!(hex, "{b:02x}").unwrap();
-    }
-    let key_hex = SecretString::from(hex);
+    let key_hex = config::key_bytes_to_hex(&signer.credential().to_bytes());
 
     let password = crate::password::prompt_new_password()?;
     config::save_key_encrypted(&key_hex, &password)?;
@@ -138,13 +131,7 @@ fn cmd_import(key: &str, output: OutputFormat, force: bool, signature_type: &str
         .context("Invalid private key")?
         .with_chain_id(Some(POLYGON));
     let address = signer.address();
-    let bytes = signer.credential().to_bytes();
-    let mut hex = String::with_capacity(2 + bytes.len() * 2);
-    hex.push_str("0x");
-    for b in &bytes {
-        write!(hex, "{b:02x}").unwrap();
-    }
-    let key_hex = SecretString::from(hex);
+    let key_hex = config::key_bytes_to_hex(&signer.credential().to_bytes());
 
     let password = crate::password::prompt_new_password()?;
     config::save_key_encrypted(&key_hex, &password)?;
