@@ -159,6 +159,13 @@ async fn set(
     let sig_type = config::resolve_signature_type(signature_type)?;
     let is_proxy = sig_type == "proxy";
 
+    if sig_type == "gnosis-safe" {
+        anyhow::bail!(
+            "Gnosis Safe approvals must be submitted through your Safe wallet interface.\n\
+             Use `approve check --signature-type gnosis-safe` to verify allowances on your Safe address."
+        );
+    }
+
     let provider = auth::create_provider(private_key).await?;
     let ctf_config = contract_config(POLYGON, false).context("No contract config for Polygon")?;
 
