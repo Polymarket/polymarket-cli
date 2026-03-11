@@ -1,9 +1,10 @@
-use super::parse_address;
-use crate::output::profiles::print_profile_detail;
-use crate::output::{OutputFormat, print_json};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::gamma::{self, types::request::PublicProfileRequest};
+use polymarket_client_sdk::types::Address;
+
+use crate::output::OutputFormat;
+use crate::output::profiles::print_profile;
 
 #[derive(Args)]
 pub struct ProfilesArgs {
@@ -16,7 +17,7 @@ pub enum ProfilesCommand {
     /// Get a public profile by wallet address
     Get {
         /// Wallet address (0x...)
-        address: String,
+        address: Address,
     },
 }
 
@@ -27,14 +28,10 @@ pub async fn execute(
 ) -> Result<()> {
     match args.command {
         ProfilesCommand::Get { address } => {
-            let addr = parse_address(&address)?;
-            let req = PublicProfileRequest::builder().address(addr).build();
+            let req = PublicProfileRequest::builder().address(address).build();
             let profile = client.public_profile(&req).await?;
 
-            match output {
-                OutputFormat::Table => print_profile_detail(&profile),
-                OutputFormat::Json => print_json(&profile)?,
-            }
+            print_profile(&profile, &output)?;
         }
     }
 

@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::io::{self, BufRead, Write};
 use std::str::FromStr;
 
@@ -7,7 +6,6 @@ use polymarket_client_sdk::auth::{LocalSigner, Signer as _};
 use polymarket_client_sdk::types::Address;
 use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
 
-use super::wallet::normalize_key;
 use crate::config;
 
 fn print_banner() {
@@ -85,7 +83,7 @@ pub fn execute() -> Result<()> {
     step_header(1, total, "Wallet");
 
     let address = if config::config_exists() {
-        let (key, source) = config::resolve_key(None);
+        let (key, source) = config::resolve_key(None)?;
         if let Some(k) = &key
             && let Ok(signer) = LocalSigner::from_str(k)
         {
@@ -115,20 +113,15 @@ fn setup_wallet() -> Result<Address> {
 
     let (address, key_hex) = if has_key {
         let key = prompt("  Enter private key: ")?;
-        let normalized = normalize_key(&key);
-        let signer = LocalSigner::from_str(&normalized)
+        let signer = LocalSigner::from_str(&key)
             .context("Invalid private key")?
             .with_chain_id(Some(POLYGON));
-        (signer.address(), normalized)
+        let hex = format!("{:#x}", signer.to_bytes());
+        (signer.address(), hex)
     } else {
         let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
         let address = signer.address();
-        let bytes = signer.credential().to_bytes();
-        let mut hex = String::with_capacity(2 + bytes.len() * 2);
-        hex.push_str("0x");
-        for b in &bytes {
-            write!(hex, "{b:02x}").unwrap();
-        }
+        let hex = format!("{:#x}", signer.to_bytes());
         (address, hex)
     };
 

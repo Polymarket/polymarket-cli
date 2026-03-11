@@ -9,8 +9,8 @@ use polymarket_client_sdk::gamma::{
 };
 
 use super::is_numeric_id;
-use crate::output::tags::{print_related_tags_table, print_tag_detail, print_tags_table};
-use crate::output::{OutputFormat, print_json};
+use crate::output::OutputFormat;
+use crate::output::tags::{print_related_tags, print_tag, print_tags};
 
 #[derive(Args)]
 pub struct TagsArgs {
@@ -72,15 +72,11 @@ pub async fn execute(client: &gamma::Client, args: TagsArgs, output: OutputForma
             let request = TagsRequest::builder()
                 .limit(limit)
                 .maybe_offset(offset)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .ascending(ascending)
                 .build();
 
             let tags = client.tags(&request).await?;
-
-            match output {
-                OutputFormat::Table => print_tags_table(&tags),
-                OutputFormat::Json => print_json(&tags)?,
-            }
+            print_tags(&tags, &output)?;
         }
 
         TagsCommand::Get { id } => {
@@ -93,10 +89,7 @@ pub async fn execute(client: &gamma::Client, args: TagsArgs, output: OutputForma
                 client.tag_by_slug(&req).await?
             };
 
-            match output {
-                OutputFormat::Table => print_tag_detail(&tag),
-                OutputFormat::Json => print_json(&tag)?,
-            }
+            print_tag(&tag, &output)?;
         }
 
         TagsCommand::Related { id, omit_empty } => {
@@ -115,10 +108,7 @@ pub async fn execute(client: &gamma::Client, args: TagsArgs, output: OutputForma
                 client.related_tags_by_slug(&req).await?
             };
 
-            match output {
-                OutputFormat::Table => print_related_tags_table(&related),
-                OutputFormat::Json => print_json(&related)?,
-            }
+            print_related_tags(&related, &output)?;
         }
 
         TagsCommand::RelatedTags { id, omit_empty } => {
@@ -137,10 +127,7 @@ pub async fn execute(client: &gamma::Client, args: TagsArgs, output: OutputForma
                 client.tags_related_to_tag_by_slug(&req).await?
             };
 
-            match output {
-                OutputFormat::Table => print_tags_table(&tags),
-                OutputFormat::Json => print_json(&tags)?,
-            }
+            print_tags(&tags, &output)?;
         }
     }
 

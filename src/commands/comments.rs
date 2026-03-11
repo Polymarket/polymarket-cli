@@ -1,6 +1,3 @@
-use super::parse_address;
-use crate::output::comments::{print_comment_detail, print_comments_table};
-use crate::output::{OutputFormat, print_json};
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::gamma::{
@@ -10,6 +7,9 @@ use polymarket_client_sdk::gamma::{
         request::{CommentsByIdRequest, CommentsByUserAddressRequest, CommentsRequest},
     },
 };
+
+use crate::output::OutputFormat;
+use crate::output::comments::{print_comment, print_comments};
 
 #[derive(Args)]
 pub struct CommentsArgs {
@@ -55,7 +55,7 @@ pub enum CommentsCommand {
     /// List comments by a user's wallet address
     ByUser {
         /// Wallet address (0x...)
-        address: String,
+        address: polymarket_client_sdk::types::Address,
 
         /// Max results
         #[arg(long, default_value = "25")]
@@ -83,8 +83,8 @@ pub enum EntityType {
 }
 
 impl From<EntityType> for ParentEntityType {
-    fn from(e: EntityType) -> Self {
-        match e {
+    fn from(v: EntityType) -> Self {
+        match v {
             EntityType::Event => ParentEntityType::Event,
             EntityType::Market => ParentEntityType::Market,
             EntityType::Series => ParentEntityType::Series,
@@ -112,15 +112,11 @@ pub async fn execute(
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .ascending(ascending)
                 .build();
 
             let comments = client.comments(&request).await?;
-
-            match output {
-                OutputFormat::Table => print_comments_table(&comments),
-                OutputFormat::Json => print_json(&comments)?,
-            }
+            print_comments(&comments, &output)?;
         }
 
         CommentsCommand::Get { id } => {
@@ -131,10 +127,7 @@ pub async fn execute(
                 anyhow::bail!("Comment not found");
             };
 
-            match output {
-                OutputFormat::Table => print_comment_detail(comment),
-                OutputFormat::Json => print_json(&comment)?,
-            }
+            print_comment(comment, &output)?;
         }
 
         CommentsCommand::ByUser {
@@ -144,21 +137,16 @@ pub async fn execute(
             order,
             ascending,
         } => {
-            let addr = parse_address(&address)?;
             let request = CommentsByUserAddressRequest::builder()
-                .user_address(addr)
+                .user_address(address)
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .maybe_ascending(if ascending { Some(true) } else { None })
+                .ascending(ascending)
                 .build();
 
             let comments = client.comments_by_user_address(&request).await?;
-
-            match output {
-                OutputFormat::Table => print_comments_table(&comments),
-                OutputFormat::Json => print_json(&comments)?,
-            }
+            print_comments(&comments, &output)?;
         }
     }
 
