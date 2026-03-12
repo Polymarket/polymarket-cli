@@ -30,16 +30,16 @@ pub fn prompt_password_with_retries<T, F>(try_fn: F) -> Result<T>
 where
     F: Fn(&str) -> Result<T>,
 {
+    let env_set = std::env::var(PASSWORD_ENV_VAR).is_ok_and(|v| !v.is_empty());
     for attempt in 1..=3 {
         let pw = prompt_password("Enter wallet password: ")?;
         match try_fn(pw.expose_secret()) {
             Ok(val) => return Ok(val),
             Err(e) => {
-                if attempt < 3 {
-                    eprintln!("Wrong password. Try again. ({attempt}/3)");
-                } else {
+                if env_set || attempt >= 3 {
                     return Err(e);
                 }
+                eprintln!("Wrong password. Try again. ({attempt}/3)");
             }
         }
     }

@@ -193,8 +193,8 @@ pub fn migrate_to_encrypted(password: &SecretString) -> Result<()> {
         anyhow::bail!("No private key found in config to migrate");
     }
 
-    save_key_encrypted(&SecretString::from(config.private_key), password)?;
     save_wallet_settings(config.chain_id, &config.signature_type)?;
+    save_key_encrypted(&SecretString::from(config.private_key), password)?;
 
     Ok(())
 }
