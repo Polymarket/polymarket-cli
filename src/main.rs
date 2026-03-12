@@ -2,6 +2,7 @@ mod auth;
 mod commands;
 mod config;
 mod output;
+mod password;
 mod shell;
 
 use std::process::ExitCode;
