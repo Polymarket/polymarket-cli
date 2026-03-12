@@ -193,8 +193,10 @@ pub fn migrate_to_encrypted(password: &SecretString) -> Result<()> {
         anyhow::bail!("No private key found in config to migrate");
     }
 
+    // Encrypt first — if this fails, plaintext key remains and nothing is lost.
+    save_key_encrypted(&SecretString::from(config.private_key.clone()), password)?;
+    // Only clear plaintext after keystore is safely written.
     save_wallet_settings(config.chain_id, &config.signature_type)?;
-    save_key_encrypted(&SecretString::from(config.private_key), password)?;
 
     Ok(())
 }
