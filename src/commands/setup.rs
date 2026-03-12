@@ -93,11 +93,10 @@ pub fn execute() -> Result<()> {
         let (addr, source) = if let Some(a) = existing_addr {
             (Some(a), old_source)
         } else if config::keystore_exists() {
-            let a =
-                crate::password::prompt_password_with_retries(config::load_key_encrypted)
-                    .ok()
-                    .and_then(|k| LocalSigner::from_str(k.expose_secret()).ok())
-                    .map(|s| s.address());
+            let key = crate::password::prompt_password_with_retries(config::load_key_encrypted)?;
+            let a = LocalSigner::from_str(key.expose_secret())
+                .ok()
+                .map(|s| s.address());
             (a, config::KeySource::Keystore)
         } else {
             (None, old_source)
