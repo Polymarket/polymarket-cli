@@ -157,7 +157,7 @@ async fn set(
     output: OutputFormat,
 ) -> Result<()> {
     let sig_type = config::resolve_signature_type(signature_type)?;
-    let is_proxy = sig_type == "proxy";
+    let is_proxy = sig_type == config::DEFAULT_SIGNATURE_TYPE;
 
     if sig_type == "gnosis-safe" {
         anyhow::bail!(
@@ -193,7 +193,7 @@ async fn set(
 
         for target in &targets {
             step += 1;
-            let label = format!("USDC \u{2192} {} (proxy)", target.name);
+            let label = format!("USDC + CTF \u{2192} {} (proxy)", target.name);
 
             let usdc_calldata = IERC20::approveCall {
                 spender: target.address,
