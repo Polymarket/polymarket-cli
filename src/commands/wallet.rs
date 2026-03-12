@@ -188,7 +188,7 @@ fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()>
             (Ok(old_key.unwrap()), old_source)
         } else if config::keystore_exists() {
             let result =
-                crate::password::prompt_password_with_retries(|pw| config::load_key_encrypted(pw));
+                crate::password::prompt_password_with_retries(config::load_key_encrypted);
             (result, config::KeySource::Keystore)
         } else {
             (

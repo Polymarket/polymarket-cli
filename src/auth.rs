@@ -46,7 +46,7 @@ pub(crate) fn resolve_key_string(private_key: Option<&str>) -> Result<secrecy::S
     }
     // 4. Encrypted keystore with retry
     if config::keystore_exists() {
-        return crate::password::prompt_password_with_retries(|pw| config::load_key_encrypted(pw));
+        return crate::password::prompt_password_with_retries(config::load_key_encrypted);
     }
     anyhow::bail!("{}", config::NO_WALLET_MSG)
 }

@@ -94,7 +94,7 @@ pub fn execute() -> Result<()> {
             (Some(a), old_source)
         } else if config::keystore_exists() {
             let a =
-                crate::password::prompt_password_with_retries(|pw| config::load_key_encrypted(pw))
+                crate::password::prompt_password_with_retries(config::load_key_encrypted)
                     .ok()
                     .and_then(|k| LocalSigner::from_str(k.expose_secret()).ok())
                     .map(|s| s.address());
