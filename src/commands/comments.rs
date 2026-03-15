@@ -42,8 +42,12 @@ pub enum CommentsCommand {
         order: Option<String>,
 
         /// Sort ascending instead of descending
-        #[arg(long)]
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending (explicit counterpart to --ascending)
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
     },
 
     /// Get a comment by ID
@@ -70,8 +74,12 @@ pub enum CommentsCommand {
         order: Option<String>,
 
         /// Sort ascending instead of descending
-        #[arg(long)]
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending (explicit counterpart to --ascending)
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
     },
 }
 
@@ -105,6 +113,7 @@ pub async fn execute(
             offset,
             order,
             ascending,
+            descending,
         } => {
             let request = CommentsRequest::builder()
                 .parent_entity_type(ParentEntityType::from(entity_type))
@@ -112,7 +121,7 @@ pub async fn execute(
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .ascending(ascending)
+                .ascending(if descending { false } else { ascending })
                 .build();
 
             let comments = client.comments(&request).await?;
@@ -136,13 +145,14 @@ pub async fn execute(
             offset,
             order,
             ascending,
+            descending,
         } => {
             let request = CommentsByUserAddressRequest::builder()
                 .user_address(address)
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .ascending(ascending)
+                .ascending(if descending { false } else { ascending })
                 .build();
 
             let comments = client.comments_by_user_address(&request).await?;

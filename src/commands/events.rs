@@ -41,8 +41,12 @@ pub enum EventsCommand {
         order: Option<String>,
 
         /// Sort ascending instead of descending
-        #[arg(long)]
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending (explicit counterpart to --ascending)
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
 
         /// Filter by tag slug (e.g. "politics", "crypto")
         #[arg(long)]
@@ -71,6 +75,7 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
             offset,
             order,
             ascending,
+            descending,
             tag,
         } => {
             let resolved_closed = closed.or_else(|| active.map(|a| !a));
@@ -79,7 +84,7 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
                 .limit(limit)
                 .maybe_closed(resolved_closed)
                 .maybe_offset(offset)
-                .ascending(ascending)
+                .ascending(if descending { false } else { ascending })
                 .maybe_tag_slug(tag)
                 // EventsRequest::order is Vec<String>; into_iter on Option yields 0 or 1 items.
                 .order(order.into_iter().collect())

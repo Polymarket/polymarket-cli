@@ -47,8 +47,12 @@ pub enum MarketsCommand {
         order: Option<String>,
 
         /// Sort ascending instead of descending
-        #[arg(long)]
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending (explicit counterpart to --ascending)
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
     },
 
     /// Get a single market by ID or slug
@@ -87,6 +91,7 @@ pub async fn execute(
             offset,
             order,
             ascending,
+            descending,
         } => {
             let resolved_closed = closed.or_else(|| active.map(|a| !a));
 
@@ -95,7 +100,7 @@ pub async fn execute(
                 .maybe_closed(resolved_closed)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .ascending(ascending)
+                .ascending(if descending { false } else { ascending })
                 .build();
 
             let markets = client.markets(&request).await?;
