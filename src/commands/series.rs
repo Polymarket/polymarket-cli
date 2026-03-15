@@ -31,8 +31,12 @@ pub enum SeriesCommand {
         order: Option<String>,
 
         /// Sort ascending instead of descending
-        #[arg(long)]
+        #[arg(long, conflicts_with = "descending")]
         ascending: bool,
+
+        /// Sort descending (explicit counterpart to --ascending)
+        #[arg(long, conflicts_with = "ascending")]
+        descending: bool,
 
         /// Filter by closed status
         #[arg(long)]
@@ -53,13 +57,14 @@ pub async fn execute(client: &gamma::Client, args: SeriesArgs, output: OutputFor
             offset,
             order,
             ascending,
+            descending,
             closed,
         } => {
             let request = SeriesListRequest::builder()
                 .limit(limit)
                 .maybe_offset(offset)
                 .maybe_order(order)
-                .ascending(ascending)
+                .ascending(if descending { false } else { ascending })
                 .maybe_closed(closed)
                 .build();
 
