@@ -195,8 +195,12 @@ pub fn migrate_to_encrypted(password: &SecretString) -> Result<()> {
 
     // Encrypt first — if this fails, plaintext key remains and nothing is lost.
     save_key_encrypted(&SecretString::from(config.private_key.clone()), password)?;
-    // Only clear plaintext after keystore is safely written.
-    save_wallet_settings(config.chain_id, &config.signature_type)?;
+    // Clear plaintext after keystore is safely written. If this fails, delete
+    // the keystore so we don't leave both plaintext and encrypted copies around.
+    if let Err(e) = save_wallet_settings(config.chain_id, &config.signature_type) {
+        let _ = std::fs::remove_file(keystore_path().unwrap_or_default());
+        return Err(e.context("Migration failed while clearing plaintext key; keystore removed so you can retry"));
+    }
 
     Ok(())
 }
