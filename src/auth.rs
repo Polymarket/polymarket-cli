@@ -39,10 +39,15 @@ pub(crate) fn resolve_key_string(private_key: Option<&str>) -> Result<secrecy::S
     // 3. Auto-migrate plaintext config to encrypted keystore
     if config::needs_migration() {
         eprintln!("Your wallet key is stored in plaintext. Encrypting it now...");
+        // Read the plaintext key before migration clears it.
+        let config = config::load_config()?
+            .ok_or_else(|| anyhow::anyhow!("No config file found to migrate"))?;
+        let key = secrecy::SecretString::from(config.private_key);
         let password = crate::password::prompt_new_password()?;
         config::migrate_to_encrypted(&password)?;
         eprintln!("Wallet key encrypted successfully.");
-        return config::load_key_encrypted(password.expose_secret());
+        // Reuse the key we already have instead of re-decrypting with scrypt.
+        return Ok(key);
     }
     // 4. Encrypted keystore with retry
     if config::keystore_exists() {
