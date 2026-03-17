@@ -93,11 +93,22 @@ pub fn execute() -> Result<()> {
         let (addr, source) = if let Some(a) = existing_addr {
             (Some(a), old_source)
         } else if config::keystore_exists() {
-            let key = crate::password::prompt_password_with_retries(config::load_key_encrypted)?;
-            let a = LocalSigner::from_str(key.expose_secret())
-                .ok()
-                .map(|s| s.address());
-            (a, config::KeySource::Keystore)
+            match crate::password::prompt_password_with_retries(config::load_key_encrypted) {
+                Ok(key) => {
+                    let a = LocalSigner::from_str(key.expose_secret())
+                        .ok()
+                        .map(|s| s.address());
+                    (a, config::KeySource::Keystore)
+                }
+                Err(e) => {
+                    // Auth failed — don't silently overwrite the existing keystore.
+                    anyhow::bail!(
+                        "Failed to unlock existing keystore: {e}\n\
+                         Run `polymarket wallet export` with the correct password, \
+                         or `polymarket wallet delete` to start fresh."
+                    );
+                }
+            }
         } else {
             (None, old_source)
         };
