@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use polymarket_client_sdk::auth::{LocalSigner, Signer as _};
 use polymarket_client_sdk::types::Address;
 use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use secrecy::ExposeSecret;
 
 use crate::config;
 
@@ -82,18 +83,43 @@ pub fn execute() -> Result<()> {
 
     step_header(1, total, "Wallet");
 
-    let address = if config::config_exists() {
-        let (key, source) = config::resolve_key(None)?;
-        if let Some(k) = &key
-            && let Ok(signer) = LocalSigner::from_str(k)
-        {
-            let addr = signer.address();
+    let address = if config::config_exists() || config::keystore_exists() {
+        let (old_key, old_source) = config::resolve_key(None)?;
+        let existing_addr = old_key
+            .as_ref()
+            .and_then(|k| LocalSigner::from_str(k.expose_secret()).ok())
+            .map(|s| s.address());
+
+        let (addr, source) = if let Some(a) = existing_addr {
+            (Some(a), old_source)
+        } else if config::keystore_exists() {
+            match crate::password::prompt_password_with_retries(config::load_key_encrypted) {
+                Ok(key) => {
+                    let a = LocalSigner::from_str(key.expose_secret())
+                        .ok()
+                        .map(|s| s.address());
+                    (a, config::KeySource::Keystore)
+                }
+                Err(e) => {
+                    // Auth failed — don't silently overwrite the existing keystore.
+                    anyhow::bail!(
+                        "Failed to unlock existing keystore: {e}\n\
+                         Run `polymarket wallet export` with the correct password, \
+                         or `polymarket wallet delete` to start fresh."
+                    );
+                }
+            }
+        } else {
+            (None, old_source)
+        };
+
+        if let Some(a) = addr {
             println!("  ✓ Wallet already configured ({})", source.label());
-            println!("    Address: {addr}");
+            println!("    Address: {a}");
             println!();
 
             if !prompt_yn("  Reconfigure wallet?", false)? {
-                finish_setup(addr)?;
+                finish_setup(a)?;
                 return Ok(());
             }
             println!();
@@ -116,16 +142,18 @@ fn setup_wallet() -> Result<Address> {
         let signer = LocalSigner::from_str(&key)
             .context("Invalid private key")?
             .with_chain_id(Some(POLYGON));
-        let hex = format!("{:#x}", signer.to_bytes());
+        let hex = config::key_bytes_to_hex(&signer.credential().to_bytes());
         (signer.address(), hex)
     } else {
         let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
         let address = signer.address();
-        let hex = format!("{:#x}", signer.to_bytes());
+        let hex = config::key_bytes_to_hex(&signer.credential().to_bytes());
         (address, hex)
     };
 
-    config::save_wallet(&key_hex, POLYGON, config::DEFAULT_SIGNATURE_TYPE)?;
+    let password = crate::password::prompt_new_password()?;
+    config::save_key_encrypted(&key_hex, &password)?;
+    config::save_wallet_settings(POLYGON, config::DEFAULT_SIGNATURE_TYPE)?;
 
     if has_key {
         println!("  ✓ Wallet imported");
@@ -137,7 +165,7 @@ fn setup_wallet() -> Result<Address> {
 
     if !has_key {
         println!();
-        println!("  ⚠ Back up your private key from the config file.");
+        println!("  ⚠ Remember your password. Use `polymarket wallet export` to back up your key.");
         println!("    If lost, your funds cannot be recovered.");
     }
 
