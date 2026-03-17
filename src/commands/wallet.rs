@@ -180,7 +180,7 @@ fn cmd_address(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<
 
 fn cmd_show(output: &OutputFormat, private_key_flag: Option<&str>) -> Result<()> {
     let (key_result, source) = {
-        let (old_key, old_source) = config::resolve_key(private_key_flag);
+        let (old_key, old_source) = config::resolve_key(private_key_flag)?;
         if old_key
             .as_ref()
             .is_some_and(|k| !k.expose_secret().is_empty())

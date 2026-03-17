@@ -84,7 +84,7 @@ pub fn execute() -> Result<()> {
     step_header(1, total, "Wallet");
 
     let address = if config::config_exists() || config::keystore_exists() {
-        let (old_key, old_source) = config::resolve_key(None);
+        let (old_key, old_source) = config::resolve_key(None)?;
         let existing_addr = old_key
             .as_ref()
             .and_then(|k| LocalSigner::from_str(k.expose_secret()).ok())

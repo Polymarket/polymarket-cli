@@ -249,24 +249,24 @@ pub fn save_wallet_settings(chain_id: u64, signature_type: &str) -> Result<()> {
 
 /// Priority: CLI flag > env var > plaintext config file (legacy).
 /// Does NOT prompt for keystore password — use `load_key_encrypted` for that.
-pub fn resolve_key(cli_flag: Option<&str>) -> (Option<SecretString>, KeySource) {
+pub fn resolve_key(cli_flag: Option<&str>) -> Result<(Option<SecretString>, KeySource)> {
     if let Some(key) = cli_flag {
-        return (Some(SecretString::from(key.to_string())), KeySource::Flag);
+        return Ok((Some(SecretString::from(key.to_string())), KeySource::Flag));
     }
     if let Ok(key) = std::env::var(ENV_VAR)
         && !key.is_empty()
     {
-        return (Some(SecretString::from(key)), KeySource::EnvVar);
+        return Ok((Some(SecretString::from(key)), KeySource::EnvVar));
     }
-    if let Ok(Some(config)) = load_config()
-        && !config.private_key.is_empty()
-    {
-        return (
-            Some(SecretString::from(config.private_key)),
-            KeySource::ConfigFile,
-        );
+    if let Some(config) = load_config()? {
+        if !config.private_key.is_empty() {
+            return Ok((
+                Some(SecretString::from(config.private_key)),
+                KeySource::ConfigFile,
+            ));
+        }
     }
-    (None, KeySource::None)
+    Ok((None, KeySource::None))
 }
 
 #[cfg(test)]
@@ -290,7 +290,7 @@ mod tests {
     fn resolve_key_flag_overrides_env() {
         let _lock = ENV_LOCK.lock().unwrap();
         unsafe { set(ENV_VAR, "env_key") };
-        let (key, source) = resolve_key(Some("flag_key"));
+        let (key, source) = resolve_key(Some("flag_key")).unwrap();
         assert_eq!(key.unwrap().expose_secret(), "flag_key");
         assert!(matches!(source, KeySource::Flag));
         unsafe { unset(ENV_VAR) };
@@ -300,7 +300,7 @@ mod tests {
     fn resolve_key_env_var_returns_env_value() {
         let _lock = ENV_LOCK.lock().unwrap();
         unsafe { set(ENV_VAR, "env_key_value") };
-        let (key, source) = resolve_key(None);
+        let (key, source) = resolve_key(None).unwrap();
         assert_eq!(key.unwrap().expose_secret(), "env_key_value");
         assert!(matches!(source, KeySource::EnvVar));
         unsafe { unset(ENV_VAR) };
@@ -310,7 +310,7 @@ mod tests {
     fn resolve_key_skips_empty_env_var() {
         let _lock = ENV_LOCK.lock().unwrap();
         unsafe { set(ENV_VAR, "") };
-        let (_, source) = resolve_key(None);
+        let (_, source) = resolve_key(None).unwrap();
         assert!(!matches!(source, KeySource::EnvVar));
         unsafe { unset(ENV_VAR) };
     }
