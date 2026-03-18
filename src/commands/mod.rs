@@ -16,6 +16,7 @@ pub(crate) mod sports;
 pub(crate) mod tags;
 pub(crate) mod upgrade;
 pub(crate) mod wallet;
+pub(crate)  mod bridge_verify;
 
 pub(crate) fn is_numeric_id(id: &str) -> bool {
     id.parse::<u64>().is_ok()
