@@ -11,7 +11,7 @@ pub(crate) mod series;
 pub(crate) mod sports;
 pub(crate) mod tags;
 
-use std::sync::OnceLock;
+use std::sync::RwLock;
 
 use chrono::{DateTime, Utc};
 use polymarket_client_sdk::types::Decimal;
@@ -21,11 +21,13 @@ use tabled::Table;
 use tabled::settings::object::Columns;
 use tabled::settings::{Modify, Style, Width};
 
-/// field names to keep in JSON output; set once at startup via --fields
-static JSON_FIELDS: OnceLock<Vec<String>> = OnceLock::new();
+/// field names to keep in JSON output; updated per invocation via --fields
+static JSON_FIELDS: RwLock<Option<Vec<String>>> = RwLock::new(None);
 
-pub(crate) fn set_json_fields(fields: Vec<String>) {
-    let _ = JSON_FIELDS.set(fields);
+pub(crate) fn set_json_fields(fields: Option<Vec<String>>) {
+    if let Ok(mut guard) = JSON_FIELDS.write() {
+        *guard = fields;
+    }
 }
 
 pub(crate) const DASH: &str = "—";
@@ -73,12 +75,17 @@ pub(crate) fn active_status(closed: Option<bool>, active: Option<bool>) -> &'sta
 }
 
 pub(crate) fn print_json(data: &(impl serde::Serialize + ?Sized)) -> anyhow::Result<()> {
-    let value = serde_json::to_value(data)?;
-    let output = match JSON_FIELDS.get() {
-        Some(fields) => filter_fields(value, fields),
-        None => value,
-    };
-    println!("{}", serde_json::to_string_pretty(&output)?);
+    let fields = JSON_FIELDS.read().ok();
+    let active = fields.as_ref().and_then(|g| g.as_ref());
+
+    if let Some(fields) = active {
+        // only go through to_value when filtering, to preserve key order otherwise
+        let value = serde_json::to_value(data)?;
+        let filtered = filter_fields(value, fields);
+        println!("{}", serde_json::to_string_pretty(&filtered)?);
+    } else {
+        println!("{}", serde_json::to_string_pretty(data)?);
+    }
     Ok(())
 }
 

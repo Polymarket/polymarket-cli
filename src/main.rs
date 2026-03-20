@@ -72,12 +72,8 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let mut cli = Cli::parse();
+    let cli = Cli::parse();
     let output = cli.output;
-
-    if let Some(fields) = cli.fields.take() {
-        output::set_json_fields(fields);
-    }
 
     if let Err(e) = run(cli).await {
         output::print_error(&e, output);
@@ -89,6 +85,9 @@ async fn main() -> ExitCode {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
+    // set (or clear) the JSON field filter for this invocation
+    output::set_json_fields(cli.fields);
+
     // Lazy-init so we only pay for the client we actually use.
     let gamma = std::cell::LazyCell::new(polymarket_client_sdk::gamma::Client::default);
     let data = std::cell::LazyCell::new(polymarket_client_sdk::data::Client::default);
