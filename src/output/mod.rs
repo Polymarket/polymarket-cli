@@ -75,14 +75,14 @@ pub(crate) fn active_status(closed: Option<bool>, active: Option<bool>) -> &'sta
 }
 
 pub(crate) fn print_json(data: &(impl serde::Serialize + ?Sized)) -> anyhow::Result<()> {
-    let fields = JSON_FIELDS.read().ok();
-    let active = fields.as_ref().and_then(|g| g.as_ref());
-
-    if let Some(fields) = active {
-        // only go through to_value when filtering, to preserve key order otherwise
+    let guard = JSON_FIELDS.read().unwrap();
+    if let Some(fields) = guard.as_deref() {
+        // only convert to Value when filtering — preserves key order in the common case
         let value = serde_json::to_value(data)?;
-        let filtered = filter_fields(value, fields);
-        println!("{}", serde_json::to_string_pretty(&filtered)?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&filter_fields(value, fields))?
+        );
     } else {
         println!("{}", serde_json::to_string_pretty(data)?);
     }
