@@ -485,6 +485,11 @@ fn parse_date(s: &str) -> Result<NaiveDate> {
         .map_err(|_| anyhow::anyhow!("Invalid date: expected YYYY-MM-DD format"))
 }
 
+/// detect the CLOB "not enough balance / allowance" error so we can refresh and retry
+fn is_balance_error(e: &polymarket_client_sdk::error::Error) -> bool {
+    e.to_string().contains("not enough balance")
+}
+
 #[allow(clippy::too_many_lines)]
 pub async fn execute(
     args: ClobArgs,
@@ -676,18 +681,44 @@ pub async fn execute(
             let size_dec =
                 Decimal::from_str(&size).map_err(|_| anyhow::anyhow!("Invalid size: {size}"))?;
 
+            let sdk_side = Side::from(side);
+            let sdk_order_type = OrderType::from(order_type);
+            let token_id = parse_token_id(&token)?;
+
             let order = client
                 .limit_order()
-                .token_id(parse_token_id(&token)?)
-                .side(Side::from(side))
+                .token_id(token_id)
+                .side(sdk_side)
                 .price(price_dec)
                 .size(size_dec)
-                .order_type(OrderType::from(order_type))
+                .order_type(sdk_order_type.clone())
                 .post_only(post_only)
                 .build()
                 .await?;
             let order = client.sign(&signer, order).await?;
-            let result = client.post_order(order).await?;
+            let result = match client.post_order(order).await {
+                Ok(r) => r,
+                Err(e) if is_balance_error(&e) => {
+                    eprintln!("Balance cache may be stale, refreshing and retrying...");
+                    let req = BalanceAllowanceRequest::builder()
+                        .asset_type(AssetType::Collateral)
+                        .build();
+                    let _ = client.update_balance_allowance(req).await;
+                    let order = client
+                        .limit_order()
+                        .token_id(token_id)
+                        .side(sdk_side)
+                        .price(price_dec)
+                        .size(size_dec)
+                        .order_type(sdk_order_type)
+                        .post_only(post_only)
+                        .build()
+                        .await?;
+                    let order = client.sign(&signer, order).await?;
+                    client.post_order(order).await?
+                }
+                Err(e) => return Err(e.into()),
+            };
             print_post_order_result(&result, output)?;
         }
 
@@ -757,16 +788,39 @@ pub async fn execute(
                 Amount::usdc(amount_dec)?
             };
 
+            let sdk_order_type = OrderType::from(order_type);
+            let token_id = parse_token_id(&token)?;
+
             let order = client
                 .market_order()
-                .token_id(parse_token_id(&token)?)
+                .token_id(token_id)
                 .side(sdk_side)
                 .amount(parsed_amount)
-                .order_type(OrderType::from(order_type))
+                .order_type(sdk_order_type.clone())
                 .build()
                 .await?;
             let order = client.sign(&signer, order).await?;
-            let result = client.post_order(order).await?;
+            let result = match client.post_order(order).await {
+                Ok(r) => r,
+                Err(e) if is_balance_error(&e) => {
+                    eprintln!("Balance cache may be stale, refreshing and retrying...");
+                    let req = BalanceAllowanceRequest::builder()
+                        .asset_type(AssetType::Collateral)
+                        .build();
+                    let _ = client.update_balance_allowance(req).await;
+                    let order = client
+                        .market_order()
+                        .token_id(token_id)
+                        .side(sdk_side)
+                        .amount(parsed_amount)
+                        .order_type(sdk_order_type)
+                        .build()
+                        .await?;
+                    let order = client.sign(&signer, order).await?;
+                    client.post_order(order).await?
+                }
+                Err(e) => return Err(e.into()),
+            };
             print_post_order_result(&result, output)?;
         }
 
