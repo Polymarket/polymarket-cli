@@ -26,6 +26,10 @@ pub(crate) struct Cli {
     /// Signature type: eoa, proxy, or gnosis-safe
     #[arg(long, global = true)]
     signature_type: Option<String>,
+
+    /// Comma-separated list of fields to include in JSON output (e.g. question,volume_num,slug)
+    #[arg(long, global = true, value_delimiter = ',')]
+    fields: Option<Vec<String>>,
 }
 
 #[derive(Subcommand)]
@@ -68,8 +72,12 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
     let output = cli.output;
+
+    if let Some(fields) = cli.fields.take() {
+        output::set_json_fields(fields);
+    }
 
     if let Err(e) = run(cli).await {
         output::print_error(&e, output);
