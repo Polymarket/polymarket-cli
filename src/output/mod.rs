@@ -11,12 +11,24 @@ pub(crate) mod series;
 pub(crate) mod sports;
 pub(crate) mod tags;
 
+use std::sync::RwLock;
+
 use chrono::{DateTime, Utc};
 use polymarket_client_sdk::types::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use serde_json::Value;
 use tabled::Table;
 use tabled::settings::object::Columns;
 use tabled::settings::{Modify, Style, Width};
+
+/// field names to keep in JSON output; updated per invocation via --fields
+static JSON_FIELDS: RwLock<Option<Vec<String>>> = RwLock::new(None);
+
+pub(crate) fn set_json_fields(fields: Option<Vec<String>>) {
+    if let Ok(mut guard) = JSON_FIELDS.write() {
+        *guard = fields;
+    }
+}
 
 pub(crate) const DASH: &str = "—";
 
@@ -63,8 +75,35 @@ pub(crate) fn active_status(closed: Option<bool>, active: Option<bool>) -> &'sta
 }
 
 pub(crate) fn print_json(data: &(impl serde::Serialize + ?Sized)) -> anyhow::Result<()> {
-    println!("{}", serde_json::to_string_pretty(data)?);
+    let guard = JSON_FIELDS.read().unwrap();
+    if let Some(fields) = guard.as_deref() {
+        // only convert to Value when filtering — preserves key order in the common case
+        let value = serde_json::to_value(data)?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&filter_fields(value, fields))?
+        );
+    } else {
+        println!("{}", serde_json::to_string_pretty(data)?);
+    }
     Ok(())
+}
+
+/// keep only the requested keys from an object or each object in an array
+fn filter_fields(value: Value, fields: &[String]) -> Value {
+    match value {
+        Value::Array(arr) => {
+            Value::Array(arr.into_iter().map(|v| filter_fields(v, fields)).collect())
+        }
+        Value::Object(map) => {
+            let filtered = map
+                .into_iter()
+                .filter(|(k, _)| fields.iter().any(|f| f == k))
+                .collect();
+            Value::Object(filtered)
+        }
+        other => other,
+    }
 }
 
 pub(crate) fn print_error(error: &anyhow::Error, format: OutputFormat) {
@@ -184,5 +223,37 @@ mod tests {
     #[test]
     fn format_decimal_just_below_million_uses_k() {
         assert_eq!(format_decimal(dec!(999_999)), "$1000.0K");
+    }
+
+    #[test]
+    fn filter_fields_keeps_only_requested_keys() {
+        let obj = serde_json::json!({"a": 1, "b": 2, "c": 3});
+        let fields = vec!["a".into(), "c".into()];
+        let result = filter_fields(obj, &fields);
+        assert_eq!(result, serde_json::json!({"a": 1, "c": 3}));
+    }
+
+    #[test]
+    fn filter_fields_applies_to_each_array_element() {
+        let arr = serde_json::json!([{"a": 1, "b": 2}, {"a": 3, "b": 4}]);
+        let fields = vec!["a".into()];
+        let result = filter_fields(arr, &fields);
+        assert_eq!(result, serde_json::json!([{"a": 1}, {"a": 3}]));
+    }
+
+    #[test]
+    fn filter_fields_returns_empty_object_when_no_match() {
+        let obj = serde_json::json!({"a": 1, "b": 2});
+        let fields = vec!["z".into()];
+        let result = filter_fields(obj, &fields);
+        assert_eq!(result, serde_json::json!({}));
+    }
+
+    #[test]
+    fn filter_fields_passes_through_non_object_values() {
+        let val = serde_json::json!(42);
+        let fields = vec!["a".into()];
+        let result = filter_fields(val, &fields);
+        assert_eq!(result, serde_json::json!(42));
     }
 }

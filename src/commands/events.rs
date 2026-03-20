@@ -1,9 +1,11 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::gamma::{
     self,
     types::request::{EventByIdRequest, EventBySlugRequest, EventTagsRequest, EventsRequest},
 };
+use rust_decimal::Decimal;
 
 use super::is_numeric_id;
 use crate::output::OutputFormat;
@@ -47,6 +49,38 @@ pub enum EventsCommand {
         /// Filter by tag slug (e.g. "politics", "crypto")
         #[arg(long)]
         tag: Option<String>,
+
+        /// Minimum trading volume (e.g. 1000000)
+        #[arg(long)]
+        volume_min: Option<Decimal>,
+
+        /// Maximum trading volume
+        #[arg(long)]
+        volume_max: Option<Decimal>,
+
+        /// Minimum liquidity
+        #[arg(long)]
+        liquidity_min: Option<Decimal>,
+
+        /// Maximum liquidity
+        #[arg(long)]
+        liquidity_max: Option<Decimal>,
+
+        /// Only events starting after this date (e.g. 2026-03-01T00:00:00Z)
+        #[arg(long)]
+        start_date_min: Option<DateTime<Utc>>,
+
+        /// Only events starting before this date
+        #[arg(long)]
+        start_date_max: Option<DateTime<Utc>>,
+
+        /// Only events ending after this date
+        #[arg(long)]
+        end_date_min: Option<DateTime<Utc>>,
+
+        /// Only events ending before this date
+        #[arg(long)]
+        end_date_max: Option<DateTime<Utc>>,
     },
 
     /// Get a single event by ID or slug
@@ -72,6 +106,14 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
             order,
             ascending,
             tag,
+            volume_min,
+            volume_max,
+            liquidity_min,
+            liquidity_max,
+            start_date_min,
+            start_date_max,
+            end_date_min,
+            end_date_max,
         } => {
             let resolved_closed = closed.or_else(|| active.map(|a| !a));
 
@@ -83,6 +125,14 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
                 .maybe_tag_slug(tag)
                 // EventsRequest::order is Vec<String>; into_iter on Option yields 0 or 1 items.
                 .order(order.into_iter().collect())
+                .maybe_volume_min(volume_min)
+                .maybe_volume_max(volume_max)
+                .maybe_liquidity_min(liquidity_min)
+                .maybe_liquidity_max(liquidity_max)
+                .maybe_start_date_min(start_date_min)
+                .maybe_start_date_max(start_date_max)
+                .maybe_end_date_min(end_date_min)
+                .maybe_end_date_max(end_date_max)
                 .build();
 
             let events = client.events(&request).await?;

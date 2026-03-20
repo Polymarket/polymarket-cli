@@ -26,6 +26,10 @@ pub(crate) struct Cli {
     /// Signature type: eoa, proxy, or gnosis-safe
     #[arg(long, global = true)]
     signature_type: Option<String>,
+
+    /// Comma-separated list of fields to include in JSON output (e.g. question,volume_num,slug)
+    #[arg(long, global = true, value_delimiter = ',')]
+    fields: Option<Vec<String>>,
 }
 
 #[derive(Subcommand)]
@@ -81,6 +85,9 @@ async fn main() -> ExitCode {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
+    // set (or clear) the JSON field filter for this invocation
+    output::set_json_fields(cli.fields);
+
     // Lazy-init so we only pay for the client we actually use.
     let gamma = std::cell::LazyCell::new(polymarket_client_sdk::gamma::Client::default);
     let data = std::cell::LazyCell::new(polymarket_client_sdk::data::Client::default);
