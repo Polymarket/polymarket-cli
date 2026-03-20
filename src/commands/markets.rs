@@ -1,4 +1,5 @@
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use clap::{Args, Subcommand};
 use polymarket_client_sdk::gamma::{
     self,
@@ -10,6 +11,7 @@ use polymarket_client_sdk::gamma::{
         response::Market,
     },
 };
+use rust_decimal::Decimal;
 
 use super::is_numeric_id;
 use crate::output::OutputFormat;
@@ -49,6 +51,42 @@ pub enum MarketsCommand {
         /// Sort ascending instead of descending
         #[arg(long)]
         ascending: bool,
+
+        /// Minimum trading volume (e.g. 1000000)
+        #[arg(long)]
+        volume_min: Option<Decimal>,
+
+        /// Maximum trading volume
+        #[arg(long)]
+        volume_max: Option<Decimal>,
+
+        /// Minimum liquidity
+        #[arg(long)]
+        liquidity_min: Option<Decimal>,
+
+        /// Maximum liquidity
+        #[arg(long)]
+        liquidity_max: Option<Decimal>,
+
+        /// Only markets starting after this date (e.g. 2026-03-01T00:00:00Z)
+        #[arg(long)]
+        start_date_min: Option<DateTime<Utc>>,
+
+        /// Only markets starting before this date
+        #[arg(long)]
+        start_date_max: Option<DateTime<Utc>>,
+
+        /// Only markets ending after this date
+        #[arg(long)]
+        end_date_min: Option<DateTime<Utc>>,
+
+        /// Only markets ending before this date
+        #[arg(long)]
+        end_date_max: Option<DateTime<Utc>>,
+
+        /// Filter by tag ID
+        #[arg(long)]
+        tag: Option<String>,
     },
 
     /// Get a single market by ID or slug
@@ -87,6 +125,15 @@ pub async fn execute(
             offset,
             order,
             ascending,
+            volume_min,
+            volume_max,
+            liquidity_min,
+            liquidity_max,
+            start_date_min,
+            start_date_max,
+            end_date_min,
+            end_date_max,
+            tag,
         } => {
             let resolved_closed = closed.or_else(|| active.map(|a| !a));
 
@@ -96,6 +143,15 @@ pub async fn execute(
                 .maybe_offset(offset)
                 .maybe_order(order)
                 .ascending(ascending)
+                .maybe_volume_num_min(volume_min)
+                .maybe_volume_num_max(volume_max)
+                .maybe_liquidity_num_min(liquidity_min)
+                .maybe_liquidity_num_max(liquidity_max)
+                .maybe_start_date_min(start_date_min)
+                .maybe_start_date_max(start_date_max)
+                .maybe_end_date_min(end_date_min)
+                .maybe_end_date_max(end_date_max)
+                .maybe_tag_id(tag)
                 .build();
 
             let markets = client.markets(&request).await?;
