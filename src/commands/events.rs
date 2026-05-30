@@ -79,7 +79,7 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
                 .limit(limit)
                 .maybe_closed(resolved_closed)
                 .maybe_offset(offset)
-                .ascending(ascending)
+                .maybe_ascending(if ascending { Some(true) } else { None })
                 .maybe_tag_slug(tag)
                 // EventsRequest::order is Vec<String>; into_iter on Option yields 0 or 1 items.
                 .order(order.into_iter().collect())
