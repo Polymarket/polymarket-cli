@@ -112,6 +112,10 @@ pub(crate) fn is_numeric_id(id: &str) -> bool {
     id.parse::<u64>().is_ok()
 }
 
+pub(crate) fn flag_matches(value: Option<bool>, filter: Option<bool>) -> bool {
+    filter.is_none_or(|expected| value == Some(expected))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,5 +136,18 @@ mod tests {
     #[test]
     fn is_numeric_id_rejects_empty() {
         assert!(!is_numeric_id(""));
+    }
+
+    #[test]
+    fn flag_matches_true_cases() {
+        assert!(flag_matches(Some(true), Some(true)));
+        assert!(flag_matches(Some(false), Some(false)));
+        assert!(flag_matches(Some(true), None));
+    }
+
+    #[test]
+    fn flag_matches_false_cases() {
+        assert!(!flag_matches(Some(true), Some(false)));
+        assert!(!flag_matches(None, Some(true)));
     }
 }
