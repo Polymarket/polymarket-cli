@@ -73,18 +73,8 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
             ascending,
             tag,
         } => {
-            let resolved_closed = closed.or_else(|| active.map(|a| !a));
-
-            let request = EventsRequest::builder()
-                .limit(limit)
-                .maybe_closed(resolved_closed)
-                .maybe_offset(offset)
-                .ascending(ascending)
-                .maybe_tag_slug(tag)
-                // EventsRequest::order is Vec<String>; into_iter on Option yields 0 or 1 items.
-                .order(order.into_iter().collect())
-                .build();
-
+            let request =
+                build_events_list_request(active, closed, limit, offset, order, ascending, tag);
             let events = client.events(&request).await?;
             print_events(&events, &output)?;
         }
@@ -111,4 +101,55 @@ pub async fn execute(client: &gamma::Client, args: EventsArgs, output: OutputFor
     }
 
     Ok(())
+}
+
+fn build_events_list_request(
+    active: Option<bool>,
+    closed: Option<bool>,
+    limit: i32,
+    offset: Option<i32>,
+    order: Option<String>,
+    ascending: bool,
+    tag: Option<String>,
+) -> EventsRequest {
+    let resolved_closed = Some(closed.unwrap_or_else(|| active.map(|a| !a).unwrap_or(false)));
+
+    EventsRequest::builder()
+        .limit(limit)
+        .maybe_closed(resolved_closed)
+        .maybe_offset(offset)
+        .ascending(ascending)
+        .maybe_tag_slug(tag)
+        // EventsRequest::order is Vec<String>; into_iter on Option yields 0 or 1 items.
+        .order(order.into_iter().collect())
+        .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn events_list_resolves_closed_filter() {
+        assert_eq!(
+            build_events_list_request(None, None, 25, None, None, false, None).closed,
+            Some(false)
+        );
+        assert_eq!(
+            build_events_list_request(None, Some(true), 25, None, None, false, None).closed,
+            Some(true)
+        );
+        assert_eq!(
+            build_events_list_request(Some(true), None, 25, None, None, false, None).closed,
+            Some(false)
+        );
+        assert_eq!(
+            build_events_list_request(Some(false), None, 25, None, None, false, None).closed,
+            Some(true)
+        );
+        assert_eq!(
+            build_events_list_request(Some(true), Some(true), 25, None, None, false, None).closed,
+            Some(true)
+        );
+    }
 }
