@@ -125,7 +125,7 @@ fn setup_wallet() -> Result<Address> {
         (address, hex)
     };
 
-    config::save_wallet(&key_hex, POLYGON, config::DEFAULT_SIGNATURE_TYPE)?;
+    config::save_wallet(&key_hex, POLYGON, config::DEFAULT_SIGNATURE_TYPE, None)?;
 
     if has_key {
         println!("  ✓ Wallet imported");

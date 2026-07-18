@@ -1,12 +1,16 @@
 use std::fs;
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
+use polymarket_client_sdk_v2::types::Address;
 use serde::{Deserialize, Serialize};
 
 const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
 const SIG_TYPE_ENV_VAR: &str = "POLYMARKET_SIGNATURE_TYPE";
+const FUNDER_ENV_VAR: &str = "POLYMARKET_FUNDER";
 pub(crate) const DEFAULT_SIGNATURE_TYPE: &str = "proxy";
+pub(crate) const POLY_1271_SIGNATURE_TYPE: &str = "poly-1271";
 
 pub(crate) const NO_WALLET_MSG: &str =
     "No wallet configured. Run `polymarket wallet create` or `polymarket wallet import <key>`";
@@ -17,6 +21,8 @@ pub(crate) struct Config {
     pub chain_id: u64,
     #[serde(default = "default_signature_type")]
     pub signature_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub funder: Option<String>,
 }
 
 fn default_signature_type() -> String {
@@ -78,23 +84,95 @@ pub fn load_config() -> Result<Option<Config>> {
     Ok(Some(config))
 }
 
+pub fn normalize_signature_type(signature_type: &str) -> Result<&'static str> {
+    match signature_type.to_ascii_lowercase().as_str() {
+        "eoa" | "0" => Ok("eoa"),
+        "proxy" | "1" => Ok(DEFAULT_SIGNATURE_TYPE),
+        "gnosis-safe" | "gnosis_safe" | "2" => Ok("gnosis-safe"),
+        "poly-1271" | "poly1271" | "poly_1271" | "3" => Ok(POLY_1271_SIGNATURE_TYPE),
+        _ => bail!(
+            "Invalid signature type '{signature_type}'. Expected eoa, proxy, gnosis-safe, or poly-1271"
+        ),
+    }
+}
+
 /// Priority: CLI flag > env var > config file > default ("proxy").
 pub fn resolve_signature_type(cli_flag: Option<&str>) -> Result<String> {
     if let Some(st) = cli_flag {
-        return Ok(st.to_string());
+        return Ok(normalize_signature_type(st)?.to_string());
     }
     if let Ok(st) = std::env::var(SIG_TYPE_ENV_VAR)
         && !st.is_empty()
     {
-        return Ok(st);
+        return Ok(normalize_signature_type(&st)?.to_string());
     }
     if let Some(config) = load_config()? {
-        return Ok(config.signature_type);
+        return Ok(normalize_signature_type(&config.signature_type)?.to_string());
     }
     Ok(DEFAULT_SIGNATURE_TYPE.to_string())
 }
 
-pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()> {
+fn parse_funder(funder: &str) -> Result<Address> {
+    Address::from_str(funder).with_context(|| format!("Invalid funder address: {funder}"))
+}
+
+/// Resolve a funder supplied for a new wallet, without inheriting an existing config value.
+/// Priority: CLI flag > env var.
+pub fn resolve_funder_input(cli_flag: Option<&str>) -> Result<Option<Address>> {
+    if let Some(funder) = cli_flag {
+        return parse_funder(funder).map(Some);
+    }
+    if let Ok(funder) = std::env::var(FUNDER_ENV_VAR)
+        && !funder.is_empty()
+    {
+        return parse_funder(&funder).map(Some);
+    }
+    Ok(None)
+}
+
+/// Resolve a funder for runtime commands. Priority: CLI flag > env var > config file.
+pub fn resolve_funder(cli_flag: Option<&str>) -> Result<Option<Address>> {
+    if let Some(funder) = resolve_funder_input(cli_flag)? {
+        return Ok(Some(funder));
+    }
+
+    load_config()?
+        .and_then(|config| config.funder)
+        .map(|funder| parse_funder(&funder))
+        .transpose()
+}
+
+pub fn validate_funder_for_signature_type(
+    signature_type: &str,
+    funder: Option<Address>,
+) -> Result<Option<Address>> {
+    let signature_type = normalize_signature_type(signature_type)?;
+    match (signature_type, funder) {
+        (POLY_1271_SIGNATURE_TYPE, None) => {
+            bail!("--funder is required when using signature type poly-1271")
+        }
+        (POLY_1271_SIGNATURE_TYPE, Some(Address::ZERO)) => {
+            bail!("The funder address cannot be zero for signature type poly-1271")
+        }
+        (POLY_1271_SIGNATURE_TYPE, Some(funder)) => Ok(Some(funder)),
+        (_, Some(_)) => bail!(
+            "A funder address is only valid with signature type poly-1271; unset --funder, POLYMARKET_FUNDER, or the config funder"
+        ),
+        (_, None) => Ok(None),
+    }
+}
+
+pub fn save_wallet(
+    key: &str,
+    chain_id: u64,
+    signature_type: &str,
+    funder: Option<&str>,
+) -> Result<()> {
+    let signature_type = normalize_signature_type(signature_type)?;
+    let funder = funder.map(parse_funder).transpose()?;
+    let funder = validate_funder_for_signature_type(signature_type, funder)?
+        .map(|address| address.to_string());
+
     let dir = config_dir()?;
     fs::create_dir_all(&dir).context("Failed to create config directory")?;
 
@@ -108,6 +186,7 @@ pub fn save_wallet(key: &str, chain_id: u64, signature_type: &str) -> Result<()>
         private_key: key.to_string(),
         chain_id,
         signature_type: signature_type.to_string(),
+        funder,
     };
     let json = serde_json::to_string_pretty(&config)?;
     let path = config_path()?;
@@ -221,5 +300,85 @@ mod tests {
         unsafe { unset(SIG_TYPE_ENV_VAR) };
         let result = resolve_signature_type(None).unwrap();
         assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn normalize_signature_type_accepts_poly_1271_aliases() {
+        for alias in ["poly-1271", "poly1271", "POLY_1271", "3"] {
+            assert_eq!(
+                normalize_signature_type(alias).unwrap(),
+                POLY_1271_SIGNATURE_TYPE
+            );
+        }
+    }
+
+    #[test]
+    fn normalize_signature_type_rejects_unknown_values() {
+        assert!(normalize_signature_type("unknown").is_err());
+    }
+
+    #[test]
+    fn poly_1271_wallet_requires_funder_before_writing_config() {
+        let error = save_wallet("unused", 137, POLY_1271_SIGNATURE_TYPE, None).unwrap_err();
+        assert!(error.to_string().contains("--funder is required"));
+    }
+
+    #[test]
+    fn non_poly_wallet_rejects_funder_before_writing_config() {
+        let error = save_wallet(
+            "unused",
+            137,
+            DEFAULT_SIGNATURE_TYPE,
+            Some("0xd1615A7B6146cDbA40a559eC876A3bcca4050890"),
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("only valid with signature type poly-1271")
+        );
+    }
+
+    #[test]
+    fn poly_1271_rejects_zero_funder() {
+        let error =
+            validate_funder_for_signature_type(POLY_1271_SIGNATURE_TYPE, Some(Address::ZERO))
+                .unwrap_err();
+        assert!(error.to_string().contains("cannot be zero"));
+    }
+
+    #[test]
+    fn poly_1271_accepts_nonzero_funder() {
+        let funder = Address::from_str("0xd1615A7B6146cDbA40a559eC876A3bcca4050890").unwrap();
+        assert_eq!(
+            validate_funder_for_signature_type(POLY_1271_SIGNATURE_TYPE, Some(funder)).unwrap(),
+            Some(funder)
+        );
+    }
+
+    #[test]
+    fn resolve_funder_input_reads_env_address() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        unsafe { set(FUNDER_ENV_VAR, "0xd1615A7B6146cDbA40a559eC876A3bcca4050890") };
+        let funder = resolve_funder_input(None).unwrap().unwrap();
+        assert_eq!(
+            funder,
+            Address::from_str("0xd1615A7B6146cDbA40a559eC876A3bcca4050890").unwrap()
+        );
+        unsafe { unset(FUNDER_ENV_VAR) };
+    }
+
+    #[test]
+    fn resolve_funder_input_flag_overrides_env() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        unsafe { set(FUNDER_ENV_VAR, "0xd1615A7B6146cDbA40a559eC876A3bcca4050890") };
+        let funder = resolve_funder_input(Some("0x0000000000000000000000000000000000000001"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            funder,
+            Address::from_str("0x0000000000000000000000000000000000000001").unwrap()
+        );
+        unsafe { unset(FUNDER_ENV_VAR) };
     }
 }

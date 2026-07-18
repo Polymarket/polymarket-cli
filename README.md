@@ -78,7 +78,8 @@ The config file (`~/.config/polymarket/config.json`):
 {
   "private_key": "0x...",
   "chain_id": 137,
-  "signature_type": "proxy"
+  "signature_type": "poly-1271",
+  "funder": "0xYOUR_POLYMARKET_DEPOSIT_WALLET"
 }
 ```
 
@@ -87,8 +88,27 @@ The config file (`~/.config/polymarket/config.json`):
 - `proxy` (default) — uses Polymarket's proxy wallet system
 - `eoa` — signs directly with your key
 - `gnosis-safe` — for multisig wallets
+- `poly-1271` — for Polymarket deposit wallets; requires an explicit funder address
 
 Override per-command with `--signature-type eoa` or via `POLYMARKET_SIGNATURE_TYPE`.
+For `poly-1271`, provide the funding wallet with `--funder 0x...` or
+`POLYMARKET_FUNDER`. Supplying a funder with another signature type is rejected
+to prevent authenticating against the wrong wallet.
+
+For an email/social-login Polymarket account backed by a deposit wallet:
+
+```bash
+polymarket wallet import 0xSIGNER_KEY \
+  --signature-type poly-1271 \
+  --funder 0xPOLYMARKET_DEPOSIT_WALLET
+
+polymarket clob balance --asset-type collateral
+```
+
+`poly-1271` is supported for CLOB V2 authentication, balances, orders, and
+trades. Direct on-chain mutations (`approve set` and CTF split/merge/redeem)
+are rejected for deposit wallets; perform those operations in the Polymarket
+app. `approve check` remains available and checks the configured funder.
 
 ### What Needs a Wallet
 

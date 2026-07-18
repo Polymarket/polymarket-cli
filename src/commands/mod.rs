@@ -19,7 +19,7 @@ pub(crate) const NEG_RISK_CTF_COLLATERAL_ADAPTER: Address =
 pub(crate) mod proxy {
     use alloy::primitives::U256;
     use alloy::sol;
-    use anyhow::{Context, Result};
+    use anyhow::{Context, Result, bail};
     use polymarket_client_sdk_v2::POLYGON;
     use polymarket_client_sdk_v2::types::{Address, B256};
 
@@ -45,7 +45,18 @@ pub(crate) mod proxy {
         polymarket_client_sdk_v2::types::address!("0xaB45c5A4B0c941a2F231C04C3f49182e1A254052");
 
     pub(crate) fn is_proxy_mode(signature_type: Option<&str>) -> Result<bool> {
-        Ok(crate::config::resolve_signature_type(signature_type)? == "proxy")
+        let signature_type = crate::config::resolve_signature_type(signature_type)?;
+        if signature_type == crate::config::POLY_1271_SIGNATURE_TYPE {
+            bail!(
+                "On-chain mutations are not supported for poly-1271 deposit wallets; use the Polymarket app for approvals, splits, merges, and redemptions"
+            );
+        }
+        Ok(signature_type == "proxy")
+    }
+
+    pub(crate) fn is_poly_1271_mode(signature_type: Option<&str>) -> Result<bool> {
+        Ok(crate::config::resolve_signature_type(signature_type)?
+            == crate::config::POLY_1271_SIGNATURE_TYPE)
     }
 
     pub(crate) fn derive_proxy_address(private_key: Option<&str>) -> Result<Address> {

@@ -23,9 +23,13 @@ pub(crate) struct Cli {
     #[arg(long, global = true)]
     private_key: Option<String>,
 
-    /// Signature type: eoa, proxy, or gnosis-safe
+    /// Signature type: eoa, proxy, gnosis-safe, or poly-1271
     #[arg(long, global = true)]
     signature_type: Option<String>,
+
+    /// Explicit Polymarket funding wallet (required for poly-1271)
+    #[arg(long, global = true)]
+    funder: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -102,6 +106,7 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
                 cli.output,
                 cli.private_key.as_deref(),
                 cli.signature_type.as_deref(),
+                cli.funder.as_deref(),
             )
             .await
         }
@@ -111,6 +116,7 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
                 cli.output,
                 cli.private_key.as_deref(),
                 cli.signature_type.as_deref(),
+                cli.funder.as_deref(),
             )
             .await
         }
@@ -125,9 +131,13 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Commands::Data(args) => commands::data::execute(&data, args, cli.output).await,
         Commands::Bridge(args) => commands::bridge::execute(&bridge, args, cli.output).await,
-        Commands::Wallet(args) => {
-            commands::wallet::execute(args, cli.output, cli.private_key.as_deref())
-        }
+        Commands::Wallet(args) => commands::wallet::execute(
+            args,
+            cli.output,
+            cli.private_key.as_deref(),
+            cli.signature_type.as_deref(),
+            cli.funder.as_deref(),
+        ),
         Commands::Upgrade => commands::upgrade::execute(),
         Commands::Status => {
             let status = gamma.status().await?;
@@ -141,5 +151,37 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wallet_import_accepts_poly_1271_funder() {
+        let cli = Cli::try_parse_from([
+            "polymarket",
+            "wallet",
+            "import",
+            "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "--signature-type",
+            "poly-1271",
+            "--funder",
+            "0xd1615A7B6146cDbA40a559eC876A3bcca4050890",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            cli.funder.as_deref(),
+            Some("0xd1615A7B6146cDbA40a559eC876A3bcca4050890")
+        );
+        let Commands::Wallet(args) = cli.command else {
+            panic!("expected wallet command");
+        };
+        let commands::wallet::WalletCommand::Import { signature_type, .. } = args.command else {
+            panic!("expected wallet import command");
+        };
+        assert_eq!(signature_type, "poly-1271");
     }
 }
