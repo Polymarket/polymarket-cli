@@ -14,7 +14,9 @@ name = "polymarket"
 path = "src/main.rs"
 
 [dependencies]
-polymarket_client_sdk_v2 = { version = "0.5.1", features = ["gamma", "data", "bridge", "clob", "ctf"] }
+# 0.7.0 is the first release that sets deposit-wallet maker/signer fields and
+# emits the ERC-7739-wrapped signature required for POLY_1271 V2 orders.
+polymarket_client_sdk_v2 = { version = "0.7.0", features = ["gamma", "data", "bridge", "clob", "ctf"] }
 alloy = { version = "1.6.3", default-features = false, features = ["providers", "rpc-types", "sol-types", "contract", "reqwest", "reqwest-rustls-tls", "signer-local", "signers"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
