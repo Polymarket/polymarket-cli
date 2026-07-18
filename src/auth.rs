@@ -20,11 +20,13 @@ fn rpc_url() -> String {
     std::env::var("POLYMARKET_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
 }
 
-fn parse_signature_type(s: &str) -> SignatureType {
+fn parse_signature_type(s: &str) -> Result<SignatureType> {
     match s {
-        config::DEFAULT_SIGNATURE_TYPE => SignatureType::Proxy,
-        "gnosis-safe" => SignatureType::GnosisSafe,
-        _ => SignatureType::Eoa,
+        config::DEFAULT_SIGNATURE_TYPE => Ok(SignatureType::Proxy),
+        "gnosis-safe" => Ok(SignatureType::GnosisSafe),
+        config::POLY_1271_SIGNATURE_TYPE => Ok(SignatureType::Poly1271),
+        "eoa" => Ok(SignatureType::Eoa),
+        _ => Err(anyhow::anyhow!("Unsupported signature type: {s}")),
     }
 }
 
@@ -41,20 +43,28 @@ pub fn resolve_signer(
 pub async fn authenticated_clob_client(
     private_key: Option<&str>,
     signature_type_flag: Option<&str>,
+    funder_flag: Option<&str>,
 ) -> Result<clob::Client<Authenticated<Normal>>> {
     let signer = resolve_signer(private_key)?;
-    authenticate_with_signer(&signer, signature_type_flag).await
+    authenticate_with_signer(&signer, signature_type_flag, funder_flag).await
 }
 
 pub async fn authenticate_with_signer(
     signer: &(impl polymarket_client_sdk_v2::auth::Signer + Sync),
     signature_type_flag: Option<&str>,
+    funder_flag: Option<&str>,
 ) -> Result<clob::Client<Authenticated<Normal>>> {
-    let sig_type = parse_signature_type(&config::resolve_signature_type(signature_type_flag)?);
+    let sig_type = parse_signature_type(&config::resolve_signature_type(signature_type_flag)?)?;
+    let funder = config::resolve_funder(funder_flag)?;
 
-    unauthenticated_clob_client()?
+    let mut builder = unauthenticated_clob_client()?
         .authentication_builder(signer)
-        .signature_type(sig_type)
+        .signature_type(sig_type);
+    if let Some(funder) = funder {
+        builder = builder.funder(funder);
+    }
+
+    builder
         .authenticate()
         .await
         .context("Failed to authenticate with Polymarket CLOB")
@@ -93,24 +103,32 @@ mod tests {
 
     #[test]
     fn parse_signature_type_proxy() {
-        assert_eq!(parse_signature_type("proxy"), SignatureType::Proxy);
+        assert_eq!(parse_signature_type("proxy").unwrap(), SignatureType::Proxy);
     }
 
     #[test]
     fn parse_signature_type_gnosis_safe() {
         assert_eq!(
-            parse_signature_type("gnosis-safe"),
+            parse_signature_type("gnosis-safe").unwrap(),
             SignatureType::GnosisSafe
         );
     }
 
     #[test]
     fn parse_signature_type_eoa() {
-        assert_eq!(parse_signature_type("eoa"), SignatureType::Eoa);
+        assert_eq!(parse_signature_type("eoa").unwrap(), SignatureType::Eoa);
     }
 
     #[test]
-    fn parse_signature_type_unknown_defaults_to_eoa() {
-        assert_eq!(parse_signature_type("unknown"), SignatureType::Eoa);
+    fn parse_signature_type_poly_1271() {
+        assert_eq!(
+            parse_signature_type("poly-1271").unwrap(),
+            SignatureType::Poly1271
+        );
+    }
+
+    #[test]
+    fn parse_signature_type_unknown_is_rejected() {
+        assert!(parse_signature_type("unknown").is_err());
     }
 }

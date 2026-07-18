@@ -101,10 +101,11 @@ pub async fn execute(
     output: OutputFormat,
     private_key: Option<&str>,
     signature_type: Option<&str>,
+    funder: Option<&str>,
 ) -> Result<()> {
     match args.command {
         ApproveCommand::Check { address } => {
-            check(address, private_key, signature_type, output).await
+            check(address, private_key, signature_type, funder, output).await
         }
         ApproveCommand::Set => set(private_key, signature_type, output).await,
     }
@@ -114,10 +115,14 @@ async fn check(
     address_arg: Option<Address>,
     private_key: Option<&str>,
     signature_type: Option<&str>,
+    funder: Option<&str>,
     output: OutputFormat,
 ) -> Result<()> {
     let owner: Address = if let Some(addr) = address_arg {
         addr
+    } else if proxy::is_poly_1271_mode(signature_type)? {
+        crate::config::resolve_funder(funder)?
+            .context("--funder is required when using signature type poly-1271")?
     } else if proxy::is_proxy_mode(signature_type)? {
         proxy::derive_proxy_address(private_key)?
     } else {

@@ -7,7 +7,17 @@ fn polymarket() -> Command {
     let mut cmd = Command::cargo_bin("polymarket").unwrap();
     cmd.env_remove("POLYMARKET_PRIVATE_KEY");
     cmd.env_remove("POLYMARKET_SIGNATURE_TYPE");
+    cmd.env_remove("POLYMARKET_FUNDER");
     cmd
+}
+
+#[test]
+fn help_lists_poly_1271_funder_options() {
+    polymarket()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("poly-1271").and(predicate::str::contains("--funder")));
 }
 
 #[test]
