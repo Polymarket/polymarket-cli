@@ -21,6 +21,40 @@ fn help_lists_poly_1271_funder_options() {
 }
 
 #[test]
+fn proxy_auth_rejects_stale_funder_before_network_request() {
+    polymarket()
+        .env(
+            "POLYMARKET_PRIVATE_KEY",
+            "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .env("POLYMARKET_SIGNATURE_TYPE", "proxy")
+        .env(
+            "POLYMARKET_FUNDER",
+            "0xd1615A7B6146cDbA40a559eC876A3bcca4050890",
+        )
+        .args(["clob", "balance", "--asset-type", "collateral"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "only valid with signature type poly-1271",
+        ));
+}
+
+#[test]
+fn poly_1271_auth_requires_funder_before_network_request() {
+    polymarket()
+        .env(
+            "POLYMARKET_PRIVATE_KEY",
+            "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        )
+        .env("POLYMARKET_SIGNATURE_TYPE", "poly-1271")
+        .args(["clob", "balance", "--asset-type", "collateral"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--funder is required"));
+}
+
+#[test]
 fn help_lists_all_top_level_commands() {
     polymarket().arg("--help").assert().success().stdout(
         predicate::str::contains("setup")

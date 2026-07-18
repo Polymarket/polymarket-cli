@@ -90,17 +90,18 @@ fn cmd_create(
 ) -> Result<()> {
     guard_overwrite(force)?;
     let signature_type = config::normalize_signature_type(signature_type)?;
+    let funder = config::resolve_funder_input(funder)?.map(|address| address.to_string());
 
     let signer = LocalSigner::random().with_chain_id(Some(POLYGON));
     let address = signer.address();
     let key_hex = format!("{:#x}", signer.to_bytes());
 
-    config::save_wallet(&key_hex, POLYGON, signature_type, funder)?;
+    config::save_wallet(&key_hex, POLYGON, signature_type, funder.as_deref())?;
     let config_path = config::config_path()?;
     let proxy_addr = (signature_type == config::DEFAULT_SIGNATURE_TYPE)
         .then(|| derive_proxy_wallet(address, POLYGON))
         .flatten();
-    let funder_addr = config::resolve_funder(funder)?.map(|address| address.to_string());
+    let funder_addr = funder;
 
     match output {
         OutputFormat::Json => {
@@ -143,6 +144,7 @@ fn cmd_import(
 ) -> Result<()> {
     guard_overwrite(force)?;
     let signature_type = config::normalize_signature_type(signature_type)?;
+    let funder = config::resolve_funder_input(funder)?.map(|address| address.to_string());
 
     let signer = LocalSigner::from_str(key)
         .context("Invalid private key")?
@@ -150,12 +152,12 @@ fn cmd_import(
     let address = signer.address();
     let key_hex = format!("{:#x}", signer.to_bytes());
 
-    config::save_wallet(&key_hex, POLYGON, signature_type, funder)?;
+    config::save_wallet(&key_hex, POLYGON, signature_type, funder.as_deref())?;
     let config_path = config::config_path()?;
     let proxy_addr = (signature_type == config::DEFAULT_SIGNATURE_TYPE)
         .then(|| derive_proxy_wallet(address, POLYGON))
         .flatten();
-    let funder_addr = config::resolve_funder(funder)?.map(|address| address.to_string());
+    let funder_addr = funder;
 
     match output {
         OutputFormat::Json => {
@@ -222,7 +224,11 @@ fn cmd_show(
                 .map(|a| a.to_string())
         })
         .flatten();
-    let funder = config::resolve_funder(funder_flag)?.map(|address| address.to_string());
+    let funder = config::validate_funder_for_signature_type(
+        &sig_type,
+        config::resolve_funder(funder_flag)?,
+    )?
+    .map(|address| address.to_string());
     let config_path = config::config_path()?;
 
     match output {

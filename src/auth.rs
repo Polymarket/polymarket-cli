@@ -54,8 +54,12 @@ pub async fn authenticate_with_signer(
     signature_type_flag: Option<&str>,
     funder_flag: Option<&str>,
 ) -> Result<clob::Client<Authenticated<Normal>>> {
-    let sig_type = parse_signature_type(&config::resolve_signature_type(signature_type_flag)?)?;
-    let funder = config::resolve_funder(funder_flag)?;
+    let signature_type = config::resolve_signature_type(signature_type_flag)?;
+    let sig_type = parse_signature_type(&signature_type)?;
+    let funder = config::validate_funder_for_signature_type(
+        &signature_type,
+        config::resolve_funder(funder_flag)?,
+    )?;
 
     let mut builder = unauthenticated_clob_client()?
         .authentication_builder(signer)

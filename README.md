@@ -91,7 +91,9 @@ The config file (`~/.config/polymarket/config.json`):
 - `poly-1271` — for Polymarket deposit wallets; requires an explicit funder address
 
 Override per-command with `--signature-type eoa` or via `POLYMARKET_SIGNATURE_TYPE`.
-Override the funding wallet with `--funder 0x...` or `POLYMARKET_FUNDER`.
+For `poly-1271`, provide the funding wallet with `--funder 0x...` or
+`POLYMARKET_FUNDER`. Supplying a funder with another signature type is rejected
+to prevent authenticating against the wrong wallet.
 
 For an email/social-login Polymarket account backed by a deposit wallet:
 

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
-use polymarket_client_sdk_v2::types::{Address, address};
+use polymarket_client_sdk_v2::types::Address;
 use serde::{Deserialize, Serialize};
 
 const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
@@ -112,23 +112,54 @@ pub fn resolve_signature_type(cli_flag: Option<&str>) -> Result<String> {
     Ok(DEFAULT_SIGNATURE_TYPE.to_string())
 }
 
-/// Priority: CLI flag > env var > config file.
-pub fn resolve_funder(cli_flag: Option<&str>) -> Result<Option<Address>> {
-    let value = if let Some(funder) = cli_flag {
-        Some(funder.to_string())
-    } else if let Ok(funder) = std::env::var(FUNDER_ENV_VAR)
+fn parse_funder(funder: &str) -> Result<Address> {
+    Address::from_str(funder).with_context(|| format!("Invalid funder address: {funder}"))
+}
+
+/// Resolve a funder supplied for a new wallet, without inheriting an existing config value.
+/// Priority: CLI flag > env var.
+pub fn resolve_funder_input(cli_flag: Option<&str>) -> Result<Option<Address>> {
+    if let Some(funder) = cli_flag {
+        return parse_funder(funder).map(Some);
+    }
+    if let Ok(funder) = std::env::var(FUNDER_ENV_VAR)
         && !funder.is_empty()
     {
-        Some(funder)
-    } else {
-        load_config()?.and_then(|config| config.funder)
-    };
+        return parse_funder(&funder).map(Some);
+    }
+    Ok(None)
+}
 
-    value
-        .map(|funder| {
-            Address::from_str(&funder).with_context(|| format!("Invalid funder address: {funder}"))
-        })
+/// Resolve a funder for runtime commands. Priority: CLI flag > env var > config file.
+pub fn resolve_funder(cli_flag: Option<&str>) -> Result<Option<Address>> {
+    if let Some(funder) = resolve_funder_input(cli_flag)? {
+        return Ok(Some(funder));
+    }
+
+    load_config()?
+        .and_then(|config| config.funder)
+        .map(|funder| parse_funder(&funder))
         .transpose()
+}
+
+pub fn validate_funder_for_signature_type(
+    signature_type: &str,
+    funder: Option<Address>,
+) -> Result<Option<Address>> {
+    let signature_type = normalize_signature_type(signature_type)?;
+    match (signature_type, funder) {
+        (POLY_1271_SIGNATURE_TYPE, None) => {
+            bail!("--funder is required when using signature type poly-1271")
+        }
+        (POLY_1271_SIGNATURE_TYPE, Some(Address::ZERO)) => {
+            bail!("The funder address cannot be zero for signature type poly-1271")
+        }
+        (POLY_1271_SIGNATURE_TYPE, Some(funder)) => Ok(Some(funder)),
+        (_, Some(_)) => bail!(
+            "A funder address is only valid with signature type poly-1271; unset --funder, POLYMARKET_FUNDER, or the config funder"
+        ),
+        (_, None) => Ok(None),
+    }
 }
 
 pub fn save_wallet(
@@ -138,22 +169,9 @@ pub fn save_wallet(
     funder: Option<&str>,
 ) -> Result<()> {
     let signature_type = normalize_signature_type(signature_type)?;
-    let funder = funder
-        .map(|value| {
-            Address::from_str(value)
-                .with_context(|| format!("Invalid funder address: {value}"))
-                .map(|address| address.to_string())
-        })
-        .transpose()?;
-
-    if signature_type == POLY_1271_SIGNATURE_TYPE {
-        let address = funder
-            .as_deref()
-            .context("--funder is required when using signature type poly-1271")?;
-        if Address::from_str(address)? == address!("0000000000000000000000000000000000000000") {
-            bail!("The funder address cannot be zero for signature type poly-1271");
-        }
-    }
+    let funder = funder.map(parse_funder).transpose()?;
+    let funder = validate_funder_for_signature_type(signature_type, funder)?
+        .map(|address| address.to_string());
 
     let dir = config_dir()?;
     fs::create_dir_all(&dir).context("Failed to create config directory")?;
@@ -306,13 +324,60 @@ mod tests {
     }
 
     #[test]
-    fn resolve_funder_reads_env_address() {
+    fn non_poly_wallet_rejects_funder_before_writing_config() {
+        let error = save_wallet(
+            "unused",
+            137,
+            DEFAULT_SIGNATURE_TYPE,
+            Some("0xd1615A7B6146cDbA40a559eC876A3bcca4050890"),
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("only valid with signature type poly-1271")
+        );
+    }
+
+    #[test]
+    fn poly_1271_rejects_zero_funder() {
+        let error =
+            validate_funder_for_signature_type(POLY_1271_SIGNATURE_TYPE, Some(Address::ZERO))
+                .unwrap_err();
+        assert!(error.to_string().contains("cannot be zero"));
+    }
+
+    #[test]
+    fn poly_1271_accepts_nonzero_funder() {
+        let funder = Address::from_str("0xd1615A7B6146cDbA40a559eC876A3bcca4050890").unwrap();
+        assert_eq!(
+            validate_funder_for_signature_type(POLY_1271_SIGNATURE_TYPE, Some(funder)).unwrap(),
+            Some(funder)
+        );
+    }
+
+    #[test]
+    fn resolve_funder_input_reads_env_address() {
         let _lock = ENV_LOCK.lock().unwrap();
         unsafe { set(FUNDER_ENV_VAR, "0xd1615A7B6146cDbA40a559eC876A3bcca4050890") };
-        let funder = resolve_funder(None).unwrap().unwrap();
+        let funder = resolve_funder_input(None).unwrap().unwrap();
         assert_eq!(
             funder,
             Address::from_str("0xd1615A7B6146cDbA40a559eC876A3bcca4050890").unwrap()
+        );
+        unsafe { unset(FUNDER_ENV_VAR) };
+    }
+
+    #[test]
+    fn resolve_funder_input_flag_overrides_env() {
+        let _lock = ENV_LOCK.lock().unwrap();
+        unsafe { set(FUNDER_ENV_VAR, "0xd1615A7B6146cDbA40a559eC876A3bcca4050890") };
+        let funder = resolve_funder_input(Some("0x0000000000000000000000000000000000000001"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            funder,
+            Address::from_str("0x0000000000000000000000000000000000000001").unwrap()
         );
         unsafe { unset(FUNDER_ENV_VAR) };
     }

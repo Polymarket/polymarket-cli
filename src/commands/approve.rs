@@ -121,8 +121,11 @@ async fn check(
     let owner: Address = if let Some(addr) = address_arg {
         addr
     } else if proxy::is_poly_1271_mode(signature_type)? {
-        crate::config::resolve_funder(funder)?
-            .context("--funder is required when using signature type poly-1271")?
+        crate::config::validate_funder_for_signature_type(
+            crate::config::POLY_1271_SIGNATURE_TYPE,
+            crate::config::resolve_funder(funder)?,
+        )?
+        .context("--funder is required when using signature type poly-1271")?
     } else if proxy::is_proxy_mode(signature_type)? {
         proxy::derive_proxy_address(private_key)?
     } else {
