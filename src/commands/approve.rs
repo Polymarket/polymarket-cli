@@ -6,11 +6,14 @@ use alloy::sol;
 use alloy::sol_types::SolCall;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
+use polymarket_client_sdk::auth::Signer as _;
+use polymarket_client_sdk::clob::types::SignatureType;
 use polymarket_client_sdk::types::{Address, address};
-use polymarket_client_sdk::{POLYGON, contract_config, wallet_contract_config};
+use polymarket_client_sdk::{
+    POLYGON, contract_config, derive_proxy_wallet, derive_safe_wallet, wallet_contract_config,
+};
 
 use crate::auth;
-use crate::config;
 use crate::output::OutputFormat;
 use crate::output::approve::{ApprovalStatus, print_approval_status, print_tx_result};
 
@@ -156,15 +159,27 @@ async fn set(
     signature_type: Option<&str>,
     output: OutputFormat,
 ) -> Result<()> {
-    let sig_type = config::resolve_signature_type(signature_type)?;
-    let is_proxy = sig_type == config::DEFAULT_SIGNATURE_TYPE;
+    let signer = auth::resolve_signer(private_key)?;
+    let eoa = signer.address();
+    let wallet = auth::resolve_wallet_address(private_key, signature_type)?;
+    let sig_type = if wallet == eoa {
+        SignatureType::Eoa
+    } else if derive_proxy_wallet(eoa, POLYGON) == Some(wallet) {
+        SignatureType::Proxy
+    } else if derive_safe_wallet(eoa, POLYGON) == Some(wallet) {
+        SignatureType::GnosisSafe
+    } else {
+        anyhow::bail!("Unable to determine approval wallet type for {wallet}");
+    };
 
-    if sig_type == "gnosis-safe" {
+    if sig_type == SignatureType::GnosisSafe {
         anyhow::bail!(
             "Gnosis Safe approvals must be submitted through your Safe wallet interface.\n\
              Use `approve check --signature-type gnosis-safe` to verify allowances on your Safe address."
         );
     }
+
+    let is_proxy = sig_type == SignatureType::Proxy;
 
     let provider = auth::create_provider(private_key).await?;
     let ctf_config = contract_config(POLYGON, false).context("No contract config for Polygon")?;
