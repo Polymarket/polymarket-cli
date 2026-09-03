@@ -26,6 +26,8 @@ anyhow = "1"
 chrono = "0.4"
 dirs = "6"
 rustyline = "15"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 
 [dev-dependencies]
 assert_cmd = "2"

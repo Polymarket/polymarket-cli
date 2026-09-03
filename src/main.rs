@@ -36,6 +36,9 @@ enum Commands {
     Shell,
     /// Interact with markets
     Markets(commands::markets::MarketsArgs),
+    /// Watch and trade the BTC 5m/15m Chainlink-resolved Up/Down markets using a fast
+    /// exchange price feed as a leading signal
+    Momentum(commands::momentum::MomentumArgs),
     /// Interact with events
     Events(commands::events::EventsArgs),
     /// Interact with tags
@@ -90,6 +93,15 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Setup => commands::setup::execute(),
         Commands::Shell => Box::pin(shell::run_shell()).await,
         Commands::Markets(args) => commands::markets::execute(&gamma, args, cli.output).await,
+        Commands::Momentum(args) => {
+            commands::momentum::execute(
+                args,
+                cli.output,
+                cli.private_key.as_deref(),
+                cli.signature_type.as_deref(),
+            )
+            .await
+        }
         Commands::Events(args) => commands::events::execute(&gamma, args, cli.output).await,
         Commands::Tags(args) => commands::tags::execute(&gamma, args, cli.output).await,
         Commands::Series(args) => commands::series::execute(&gamma, args, cli.output).await,

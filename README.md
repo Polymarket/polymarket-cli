@@ -302,6 +302,42 @@ polymarket clob notifications
 polymarket clob delete-notifications "NOTIF1,NOTIF2"
 ```
 
+### BTC Momentum (Chainlink signal)
+
+Polymarket's `btc-updown-5m-*` / `btc-updown-15m-*` markets resolve against Chainlink's
+BTC/USD TWAP data stream: "Up" if the price at window-close is greater than or equal to the
+price at window-open. `momentum run` watches a fast exchange price feed (Coinbase BTC-USD,
+free/no-auth — used as a stand-in for the real Chainlink Data Streams feed, which needs a
+paid subscription we don't have) and buys the side it currently favors, before Polymarket's
+own order book has fully repriced.
+
+```bash
+# Print signals only, no wallet needed
+polymarket momentum run --window 5m --stake 5 --dry-run
+
+# Live — places real market-buy orders (needs a configured, funded wallet)
+polymarket momentum run --window 5m --stake 5
+polymarket momentum run --window 15m --stake 10 --min-deviation-bps 8 --max-windows 20
+```
+
+**Flags**: `--window` (`5m` or `15m`, required), `--stake` (USDC per entry, required),
+`--min-deviation-bps` (min move from the window-open reference before acting, default `5`),
+`--settle-in-secs` (ignore signals for this many seconds after a window opens, default `3`),
+`--min-seconds-remaining` (skip entries this close to window close, default `15`),
+`--max-entry-price` (skip if the favored side already costs more than this, default `0.85`),
+`--max-windows` (auto-stop after N windows, default: runs until interrupted), `--dry-run`
+(log signals only, never places orders — also skips wallet auth entirely).
+
+At most one entry is placed per window, as a fire-or-kill (FOK) market order. On startup the
+tool always sits out the current in-progress window — it needs to observe a full window's
+transition live to capture a reference price anchored to the true window-open instant, so
+trading only begins from the next clean boundary onward.
+
+> **This is a directional heuristic, not the resolution feed.** Coinbase spot and Chainlink's
+> TWAP can and do diverge — there is no guarantee this captures an edge net of fees and
+> latency, and you can lose the entire stake on any given window. Start with `--dry-run` and
+> a small `--stake` before trusting it with real size.
+
 ### On-Chain Data
 
 Public data — no wallet needed.
