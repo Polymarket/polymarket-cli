@@ -1,6 +1,7 @@
 mod auth;
 mod commands;
 mod config;
+mod endpoints;
 mod output;
 mod shell;
 
@@ -81,21 +82,32 @@ async fn main() -> ExitCode {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
-    // Lazy-init so we only pay for the client we actually use.
-    let gamma = std::cell::LazyCell::new(polymarket_client_sdk_v2::gamma::Client::default);
-    let data = std::cell::LazyCell::new(polymarket_client_sdk_v2::data::Client::default);
     let bridge = std::cell::LazyCell::new(polymarket_client_sdk_v2::bridge::Client::default);
 
     match cli.command {
         Commands::Setup => commands::setup::execute(),
         Commands::Shell => Box::pin(shell::run_shell()).await,
-        Commands::Markets(args) => commands::markets::execute(&gamma, args, cli.output).await,
-        Commands::Events(args) => commands::events::execute(&gamma, args, cli.output).await,
-        Commands::Tags(args) => commands::tags::execute(&gamma, args, cli.output).await,
-        Commands::Series(args) => commands::series::execute(&gamma, args, cli.output).await,
-        Commands::Comments(args) => commands::comments::execute(&gamma, args, cli.output).await,
-        Commands::Profiles(args) => commands::profiles::execute(&gamma, args, cli.output).await,
-        Commands::Sports(args) => commands::sports::execute(&gamma, args, cli.output).await,
+        Commands::Markets(args) => {
+            commands::markets::execute(&endpoints::gamma_client()?, args, cli.output).await
+        }
+        Commands::Events(args) => {
+            commands::events::execute(&endpoints::gamma_client()?, args, cli.output).await
+        }
+        Commands::Tags(args) => {
+            commands::tags::execute(&endpoints::gamma_client()?, args, cli.output).await
+        }
+        Commands::Series(args) => {
+            commands::series::execute(&endpoints::gamma_client()?, args, cli.output).await
+        }
+        Commands::Comments(args) => {
+            commands::comments::execute(&endpoints::gamma_client()?, args, cli.output).await
+        }
+        Commands::Profiles(args) => {
+            commands::profiles::execute(&endpoints::gamma_client()?, args, cli.output).await
+        }
+        Commands::Sports(args) => {
+            commands::sports::execute(&endpoints::gamma_client()?, args, cli.output).await
+        }
         Commands::Approve(args) => {
             commands::approve::execute(
                 args,
@@ -123,14 +135,16 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
             )
             .await
         }
-        Commands::Data(args) => commands::data::execute(&data, args, cli.output).await,
+        Commands::Data(args) => {
+            commands::data::execute(&endpoints::data_client()?, args, cli.output).await
+        }
         Commands::Bridge(args) => commands::bridge::execute(&bridge, args, cli.output).await,
         Commands::Wallet(args) => {
             commands::wallet::execute(args, cli.output, cli.private_key.as_deref())
         }
         Commands::Upgrade => commands::upgrade::execute(),
         Commands::Status => {
-            let status = gamma.status().await?;
+            let status = endpoints::gamma_client()?.status().await?;
             match cli.output {
                 OutputFormat::Json => {
                     println!("{}", serde_json::json!({"status": status}));

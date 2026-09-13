@@ -7,14 +7,9 @@ use polymarket_client_sdk_v2::auth::{LocalSigner, Normal, Signer as _};
 use polymarket_client_sdk_v2::clob::types::SignatureType;
 use polymarket_client_sdk_v2::{POLYGON, clob};
 
-use crate::config;
+use crate::{config, endpoints};
 
-const DEFAULT_CLOB_HOST: &str = "https://clob.polymarket.com";
 const DEFAULT_RPC_URL: &str = "https://polygon.drpc.org";
-
-fn clob_host() -> String {
-    std::env::var("POLYMARKET_CLOB_HOST").unwrap_or_else(|_| DEFAULT_CLOB_HOST.to_string())
-}
 
 fn rpc_url() -> String {
     std::env::var("POLYMARKET_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
@@ -61,7 +56,7 @@ pub async fn authenticate_with_signer(
 }
 
 pub fn unauthenticated_clob_client() -> Result<clob::Client> {
-    clob::Client::new(&clob_host(), clob::Config::default())
+    clob::Client::new(&endpoints::clob_host(), clob::Config::default())
         .context("Failed to create Polymarket CLOB client")
 }
 

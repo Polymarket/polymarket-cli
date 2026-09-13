@@ -53,6 +53,28 @@ polymarket approve set
 
 ## Configuration
 
+### API hosts
+
+Override service URLs for local emulators or test environments:
+
+| Variable | Default |
+| --- | --- |
+| `POLYMARKET_GAMMA_HOST` | `https://gamma-api.polymarket.com` |
+| `POLYMARKET_DATA_HOST` | `https://data-api.polymarket.com` |
+| `POLYMARKET_CLOB_HOST` | `https://clob.polymarket.com` |
+
+URLs may include a path prefix, with or without a trailing slash. Clients are
+created only for the selected command. Invalid URLs produce normal CLI errors.
+
+```bash
+POLYMARKET_GAMMA_HOST=http://127.0.0.1:4400/gamma polymarket markets list
+POLYMARKET_DATA_HOST=http://127.0.0.1:4400/data polymarket data positions 0xYOUR_ADDRESS
+POLYMARKET_CLOB_HOST=http://127.0.0.1:4400/clob polymarket clob book TOKEN_ID
+```
+
+These overrides do not redirect Bridge or blockchain RPC requests. RPC has its
+own `POLYMARKET_RPC_URL` override. Use fixture credentials with local services.
+
 ### Wallet Setup
 
 The CLI needs a private key to sign orders and on-chain transactions. Three ways to provide it (checked in this order):
