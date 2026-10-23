@@ -38,6 +38,7 @@ pub fn print_order_book(
                 let rows: Vec<Row> = result
                     .bids
                     .iter()
+                    .rev()
                     .map(|o| Row {
                         price: o.price.to_string(),
                         size: o.size.to_string(),
@@ -56,6 +57,7 @@ pub fn print_order_book(
                 let rows: Vec<Row> = result
                     .asks
                     .iter()
+                    .rev()
                     .map(|o| Row {
                         price: o.price.to_string(),
                         size: o.size.to_string(),
