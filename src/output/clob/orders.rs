@@ -217,6 +217,11 @@ pub fn print_cancel_result(
             crate::output::print_json(&data)?;
         }
     }
+
+    if !result.not_canceled.is_empty() {
+        anyhow::bail!("one or more orders could not be canceled");
+    }
+
     Ok(())
 }
 
@@ -350,4 +355,44 @@ pub fn print_orders_scoring(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cancel_response(canceled: &[&str], not_canceled: &[(&str, &str)]) -> CancelOrdersResponse {
+        serde_json::from_value(json!({
+            "canceled": canceled,
+            "not_canceled": not_canceled
+                .iter()
+                .copied()
+                .collect::<std::collections::HashMap<_, _>>(),
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn cancel_result_returns_error_for_partial_failure_in_all_output_formats() {
+        let response = cancel_response(
+            &["order-ok"],
+            &[("order-failed", "order is not cancelable")],
+        );
+
+        for output in [OutputFormat::Table, OutputFormat::Json] {
+            assert!(
+                print_cancel_result(&response, &output).is_err(),
+                "a non-empty not_canceled map must make the command fail in {output:?} mode"
+            );
+        }
+    }
+
+    #[test]
+    fn cancel_result_returns_success_when_all_orders_are_canceled() {
+        let response = cancel_response(&["order-ok"], &[]);
+
+        for output in [OutputFormat::Table, OutputFormat::Json] {
+            assert!(print_cancel_result(&response, &output).is_ok());
+        }
+    }
 }
