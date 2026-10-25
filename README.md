@@ -90,6 +90,14 @@ The config file (`~/.config/polymarket/config.json`):
 
 Override per-command with `--signature-type eoa` or via `POLYMARKET_SIGNATURE_TYPE`.
 
+### Endpoint Overrides
+
+The CLI uses production endpoints by default. Local and staging environments can override them with:
+
+- `POLYMARKET_CLOB_HOST` — CLOB API host (default: `https://clob.polymarket.com`)
+- `POLYMARKET_GEOBLOCK_HOST` — geoblock API host (default: `https://polymarket.com`)
+- `POLYMARKET_RPC_URL` — Polygon RPC URL (default: `https://polygon.drpc.org`)
+
 ### What Needs a Wallet
 
 Most commands work without a wallet — browsing markets, viewing order books, checking prices. You only need a wallet for:

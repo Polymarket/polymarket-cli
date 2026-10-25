@@ -16,6 +16,13 @@ fn clob_host() -> String {
     std::env::var("POLYMARKET_CLOB_HOST").unwrap_or_else(|_| DEFAULT_CLOB_HOST.to_string())
 }
 
+fn clob_config() -> clob::Config {
+    std::env::var("POLYMARKET_GEOBLOCK_HOST").map_or_else(
+        |_| clob::Config::default(),
+        |host| clob::Config::builder().geoblock_host(host).build(),
+    )
+}
+
 fn rpc_url() -> String {
     std::env::var("POLYMARKET_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
 }
@@ -61,7 +68,7 @@ pub async fn authenticate_with_signer(
 }
 
 pub fn unauthenticated_clob_client() -> Result<clob::Client> {
-    clob::Client::new(&clob_host(), clob::Config::default())
+    clob::Client::new(&clob_host(), clob_config())
         .context("Failed to create Polymarket CLOB client")
 }
 

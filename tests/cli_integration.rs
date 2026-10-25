@@ -2,12 +2,74 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::thread;
 
 fn polymarket() -> Command {
     let mut cmd = Command::cargo_bin("polymarket").unwrap();
     cmd.env_remove("POLYMARKET_PRIVATE_KEY");
     cmd.env_remove("POLYMARKET_SIGNATURE_TYPE");
     cmd
+}
+
+fn geoblock_server() -> (String, thread::JoinHandle<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0; 4096];
+        let bytes_read = stream.read(&mut request).unwrap();
+        let request = String::from_utf8_lossy(&request[..bytes_read]);
+        let request_line = request.lines().next().unwrap_or_default().to_string();
+
+        let (status, body) = if request_line == "GET /api/geoblock HTTP/1.1" {
+            (
+                "200 OK",
+                r#"{"blocked":false,"ip":"127.0.0.1","country":"US","region":"NY"}"#,
+            )
+        } else {
+            ("502 Bad Gateway", r#"{"error":"unexpected request"}"#)
+        };
+        write!(
+            stream,
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+
+        request_line
+    });
+    (format!("http://{address}/"), handle)
+}
+
+#[test]
+fn geoblock_host_override_routes_request_to_local_fixture() {
+    let (host, server) = geoblock_server();
+
+    let output = polymarket()
+        .args(["--output", "json", "clob", "geoblock"])
+        .env("POLYMARKET_CLOB_HOST", &host)
+        .env("POLYMARKET_GEOBLOCK_HOST", &host)
+        .env("HTTPS_PROXY", &host)
+        .env("https_proxy", &host)
+        .env("NO_PROXY", "127.0.0.1,localhost")
+        .env("no_proxy", "127.0.0.1,localhost")
+        .output()
+        .unwrap();
+
+    let request_line = server.join().unwrap();
+    assert_eq!(request_line, "GET /api/geoblock HTTP/1.1");
+    assert!(
+        output.status.success(),
+        "stderr: {}\nstdout: {}",
+        String::from_utf8_lossy(&output.stderr),
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()["blocked"],
+        false
+    );
 }
 
 #[test]
