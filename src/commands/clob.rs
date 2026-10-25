@@ -23,6 +23,7 @@ use polymarket_client_sdk_v2::clob::types::{
         LastTradePriceRequest, MidpointRequest, OrderBookSummaryRequest, OrdersRequest,
         PriceHistoryRequest, PriceRequest, SpreadRequest, TradesRequest, UserRewardsEarningRequest,
     },
+    response::PostOrderResponse,
 };
 use polymarket_client_sdk_v2::types::{B256, Decimal, U256};
 
@@ -484,6 +485,48 @@ fn parse_date(s: &str) -> Result<NaiveDate> {
         .map_err(|_| anyhow::anyhow!("Invalid date: expected YYYY-MM-DD format"))
 }
 
+fn order_rejection_reason(response: &PostOrderResponse) -> &str {
+    response
+        .error_msg
+        .as_deref()
+        .filter(|message| !message.is_empty())
+        .unwrap_or("unknown error")
+}
+
+fn ensure_order_submission_succeeded(response: &PostOrderResponse) -> Result<()> {
+    if response.success {
+        Ok(())
+    } else {
+        anyhow::bail!(
+            "Order submission failed: {}",
+            order_rejection_reason(response)
+        )
+    }
+}
+
+fn ensure_order_submissions_succeeded(responses: &[PostOrderResponse]) -> Result<()> {
+    let rejection_reasons: Vec<_> = responses
+        .iter()
+        .filter(|response| !response.success)
+        .map(order_rejection_reason)
+        .collect();
+
+    if rejection_reasons.is_empty() {
+        Ok(())
+    } else {
+        let submission = if rejection_reasons.len() == 1 {
+            "submission"
+        } else {
+            "submissions"
+        };
+        anyhow::bail!(
+            "{} order {submission} failed: {}",
+            rejection_reasons.len(),
+            rejection_reasons.join("; ")
+        )
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 pub async fn execute(
     args: ClobArgs,
@@ -691,6 +734,7 @@ pub async fn execute(
                 .pop()
                 .ok_or_else(|| anyhow::anyhow!("Order submission returned no result"))?;
             print_post_order_result(&result, output)?;
+            ensure_order_submission_succeeded(&result)?;
         }
 
         ClobCommand::PostOrders {
@@ -739,6 +783,7 @@ pub async fn execute(
 
             let results = client.post_orders(signed_orders).await?;
             print_post_orders_result(&results, output)?;
+            ensure_order_submissions_succeeded(&results)?;
         }
 
         ClobCommand::MarketOrder {
@@ -773,6 +818,7 @@ pub async fn execute(
                 .pop()
                 .ok_or_else(|| anyhow::anyhow!("Order submission returned no result"))?;
             print_post_order_result(&result, output)?;
+            ensure_order_submission_succeeded(&result)?;
         }
 
         // ── Authenticated trading commands (no signer needed) ───────────
@@ -981,6 +1027,71 @@ pub async fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn post_order_response(success: bool, error_msg: &str) -> PostOrderResponse {
+        serde_json::from_value(serde_json::json!({
+            "errorMsg": error_msg,
+            "makingAmount": if success { "5.00" } else { "0" },
+            "takingAmount": if success { "10" } else { "0" },
+            "orderID": if success { "accepted-order" } else { "" },
+            "status": if success { "LIVE" } else { "UNMATCHED" },
+            "success": success,
+            "transactionHashes": [],
+            "tradeIds": []
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn accepted_order_submission_succeeds() {
+        let response = post_order_response(true, "");
+        assert!(ensure_order_submission_succeeded(&response).is_ok());
+    }
+
+    #[test]
+    fn rejected_order_submission_fails_with_api_message() {
+        let response = post_order_response(false, "synthetic rejection");
+        let error = ensure_order_submission_succeeded(&response).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "Order submission failed: synthetic rejection"
+        );
+    }
+
+    #[test]
+    fn partially_rejected_batch_fails_after_inspecting_all_responses() {
+        let responses = vec![
+            post_order_response(false, "first rejection"),
+            post_order_response(true, ""),
+            post_order_response(false, "second rejection"),
+        ];
+
+        let error = ensure_order_submissions_succeeded(&responses).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "2 order submissions failed: first rejection; second rejection"
+        );
+    }
+
+    #[test]
+    fn single_rejection_in_batch_uses_singular_error() {
+        let responses = vec![
+            post_order_response(true, ""),
+            post_order_response(false, "only rejection"),
+        ];
+
+        let error = ensure_order_submissions_succeeded(&responses).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "1 order submission failed: only rejection"
+        );
+    }
+
+    #[test]
+    fn accepted_batch_submission_succeeds() {
+        let responses = vec![post_order_response(true, ""), post_order_response(true, "")];
+        assert!(ensure_order_submissions_succeeded(&responses).is_ok());
+    }
 
     #[test]
     fn parse_token_id_valid_numeric() {
