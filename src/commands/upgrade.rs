@@ -7,6 +7,20 @@ use anyhow::{Context, bail};
 const REPO: &str = "Polymarket/polymarket-cli";
 const BINARY: &str = "polymarket";
 
+struct TemporaryDirectory(String);
+
+impl TemporaryDirectory {
+    fn path(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Drop for TemporaryDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 pub fn execute() -> anyhow::Result<()> {
     let current_version = env!("CARGO_PKG_VERSION");
     println!("Current version: v{current_version}");
@@ -30,7 +44,7 @@ pub fn execute() -> anyhow::Result<()> {
     let current_exe = env::current_exe().context("Failed to determine current executable path")?;
 
     let tmpdir = tempdir()?;
-    let tarball = format!("{tmpdir}/{BINARY}.tar.gz");
+    let tarball = format!("{}/{BINARY}.tar.gz", tmpdir.path());
 
     let tarball_name = format!("{BINARY}-{latest_tag}-{target}.tar.gz");
     let checksums_url =
@@ -46,7 +60,7 @@ pub fn execute() -> anyhow::Result<()> {
         bail!("Download failed (HTTP error)");
     }
 
-    let checksums_file = format!("{tmpdir}/checksums.txt");
+    let checksums_file = format!("{}/checksums.txt", tmpdir.path());
     let status = Command::new("curl")
         .args(["-sSfL", "-o", &checksums_file, &checksums_url])
         .status()
@@ -58,14 +72,14 @@ pub fn execute() -> anyhow::Result<()> {
     verify_checksum(&tarball, &checksums_file, &tarball_name)?;
 
     let status = Command::new("tar")
-        .args(["xzf", &tarball, "-C", &tmpdir])
+        .args(["xzf", &tarball, "-C", tmpdir.path()])
         .status()
         .context("Failed to extract archive")?;
     if !status.success() {
         bail!("Failed to extract archive");
     }
 
-    let new_binary = format!("{tmpdir}/{BINARY}");
+    let new_binary = format!("{}/{BINARY}", tmpdir.path());
 
     // Replace the current binary
     let exe_path = current_exe.to_str().context("Non-UTF8 executable path")?;
@@ -90,8 +104,6 @@ pub fn execute() -> anyhow::Result<()> {
     }
 
     let _ = fs::remove_file(&backup);
-    let _ = fs::remove_dir_all(&tmpdir);
-
     println!("Updated to {latest_tag}");
     Ok(())
 }
@@ -132,7 +144,7 @@ fn detect_target() -> anyhow::Result<&'static str> {
     }
 }
 
-fn tempdir() -> anyhow::Result<String> {
+fn tempdir() -> anyhow::Result<TemporaryDirectory> {
     let output = Command::new("mktemp")
         .args(["-d"])
         .output()
@@ -140,7 +152,9 @@ fn tempdir() -> anyhow::Result<String> {
     if !output.status.success() {
         bail!("mktemp failed");
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    Ok(TemporaryDirectory(
+        String::from_utf8_lossy(&output.stdout).trim().to_string(),
+    ))
 }
 
 fn verify_checksum(

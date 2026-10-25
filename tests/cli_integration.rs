@@ -486,3 +486,69 @@ fn wallet_address_succeeds_or_fails_gracefully() {
     // Either succeeds or fails with an error message — not a panic
     assert!(output.status.success() || !output.stderr.is_empty());
 }
+
+#[cfg(unix)]
+#[test]
+fn upgrade_cleans_up_temporary_directory_after_download_failure() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TestDirectory(std::path::PathBuf);
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = TestDirectory(std::env::temp_dir().join(format!(
+        "polymarket-upgrade-cleanup-{}-{unique}",
+        std::process::id()
+    )));
+    let fake_bin = root.0.join("bin");
+    let upgrade_directory = root.0.join("upgrade-temporary-directory");
+    fs::create_dir_all(&fake_bin).unwrap();
+
+    let fake_curl = fake_bin.join("curl");
+    fs::write(
+        &fake_curl,
+        "#!/bin/sh\ncase \"$*\" in\n  *releases/latest*) printf '%s\\n' '{\"tag_name\":\"v999.0.0\"}'; exit 0 ;;\n  *) exit 22 ;;\nesac\n",
+    )
+    .unwrap();
+    fs::set_permissions(&fake_curl, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let fake_mktemp = fake_bin.join("mktemp");
+    fs::write(
+        &fake_mktemp,
+        format!(
+            "#!/bin/sh\nmkdir -p '{}'\nprintf '%s\\n' '{}'\n",
+            upgrade_directory.display(),
+            upgrade_directory.display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&fake_mktemp, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let path = format!(
+        "{}:{}",
+        fake_bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+    polymarket()
+        .arg("upgrade")
+        .env("PATH", path)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Download failed"));
+
+    assert!(
+        !upgrade_directory.exists(),
+        "temporary upgrade directory was not removed: {}",
+        upgrade_directory.display()
+    );
+}
