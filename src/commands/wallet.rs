@@ -218,6 +218,10 @@ fn cmd_show(output: OutputFormat, private_key_flag: Option<&str>) -> Result<()> 
 }
 
 fn cmd_reset(output: OutputFormat, force: bool) -> Result<()> {
+    if matches!(output, OutputFormat::Json) && !force {
+        bail!("wallet reset in JSON mode requires --force");
+    }
+
     if !config::config_exists() {
         match output {
             OutputFormat::Table => println!("Nothing to reset. No config found."),
@@ -238,8 +242,7 @@ fn cmd_reset(output: OutputFormat, force: bool) -> Result<()> {
         let mut input = String::new();
         io::stdin().lock().read_line(&mut input)?;
         if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
-            println!("Aborted.");
-            return Ok(());
+            bail!("Aborted.");
         }
     }
 

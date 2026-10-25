@@ -2,12 +2,48 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn polymarket() -> Command {
     let mut cmd = Command::cargo_bin("polymarket").unwrap();
     cmd.env_remove("POLYMARKET_PRIVATE_KEY");
     cmd.env_remove("POLYMARKET_SIGNATURE_TYPE");
     cmd
+}
+
+struct TestHome(PathBuf);
+
+impl TestHome {
+    fn with_config() -> Self {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "polymarket-cli-test-{}-{unique}",
+            std::process::id()
+        ));
+        let config_dir = path.join(".config/polymarket");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(config_dir.join("config.json"), "{}").unwrap();
+        Self(path)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn config_dir(&self) -> PathBuf {
+        self.0.join(".config/polymarket")
+    }
+}
+
+impl Drop for TestHome {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
 }
 
 #[test]
@@ -175,6 +211,64 @@ fn wallet_show_json_has_configured_field() {
         parsed.get("configured").is_some(),
         "missing 'configured' key: {parsed}"
     );
+}
+
+#[test]
+fn wallet_reset_json_without_force_fails_with_one_json_result() {
+    let home = TestHome::with_config();
+    let output = polymarket()
+        .env("HOME", home.path())
+        .args(["-o", "json", "wallet", "reset"])
+        .write_stdin("n\n")
+        .output()
+        .unwrap();
+
+    assert!(!output.status.success());
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("stdout not one valid JSON result: {e}\nstdout: {stdout}"));
+    assert!(
+        parsed["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("--force")),
+        "unexpected result: {parsed}"
+    );
+    assert!(home.config_dir().exists());
+}
+
+#[test]
+fn wallet_reset_table_decline_fails_and_preserves_config() {
+    let home = TestHome::with_config();
+
+    polymarket()
+        .env("HOME", home.path())
+        .args(["wallet", "reset"])
+        .write_stdin("n\n")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Are you sure?"))
+        .stderr(predicate::str::contains("Aborted"));
+
+    assert!(home.config_dir().exists());
+}
+
+#[test]
+fn wallet_reset_json_force_removes_config() {
+    let home = TestHome::with_config();
+    let output = polymarket()
+        .env("HOME", home.path())
+        .args(["-o", "json", "wallet", "reset", "--force"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("stdout not valid JSON: {e}\nstdout: {stdout}"));
+    assert_eq!(parsed["reset"], true);
+    assert!(!home.config_dir().exists());
 }
 
 #[test]
