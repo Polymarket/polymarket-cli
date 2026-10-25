@@ -4,9 +4,9 @@ mod config;
 mod output;
 mod shell;
 
-use std::process::ExitCode;
+use std::{ffi::OsStr, process::ExitCode};
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, error::ErrorKind};
 use output::OutputFormat;
 
 #[derive(Parser)]
@@ -68,7 +68,31 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let args: Vec<_> = std::env::args_os().collect();
+    let requested_output = requested_output_format(&args[1..]);
+    let cli = match Cli::try_parse_from(args) {
+        Ok(cli) => cli,
+        Err(error) => {
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) {
+                error.exit();
+            }
+
+            if matches!(requested_output, OutputFormat::Json) {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "error": error.to_string(),
+                    })
+                );
+                return ExitCode::from(u8::try_from(error.exit_code()).unwrap_or(1));
+            }
+
+            error.exit();
+        }
+    };
     let output = cli.output;
 
     if let Err(e) = run(cli).await {
@@ -77,6 +101,40 @@ async fn main() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+fn requested_output_format(args: &[impl AsRef<OsStr>]) -> OutputFormat {
+    let mut requested = OutputFormat::Table;
+    let mut args = args.iter();
+
+    while let Some(arg) = args.next() {
+        let arg = arg.as_ref();
+        if arg == "--" {
+            break;
+        }
+
+        if arg == "--output" || arg == "-o" {
+            if args.next().is_some_and(|value| value.as_ref() == "json") {
+                requested = OutputFormat::Json;
+            }
+            continue;
+        }
+
+        let Some(arg) = arg.to_str() else {
+            continue;
+        };
+        if arg
+            .strip_prefix("--output=")
+            .is_some_and(|value| value == "json")
+            || arg
+                .strip_prefix("-o")
+                .is_some_and(|value| !value.is_empty() && value == "json")
+        {
+            requested = OutputFormat::Json;
+        }
+    }
+
+    requested
 }
 
 #[allow(clippy::too_many_lines)]

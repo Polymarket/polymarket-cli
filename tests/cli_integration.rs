@@ -91,9 +91,65 @@ fn no_args_shows_usage() {
         .stderr(predicate::str::contains("Usage"));
 }
 
+fn assert_json_parse_error(args: &[&str]) {
+    let output = polymarket().args(args).output().unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        output.stderr.is_empty(),
+        "stderr should be empty in JSON mode: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("stdout not valid JSON: {e}\nstdout: {stdout}"));
+    assert!(
+        parsed
+            .get("error")
+            .is_some_and(serde_json::Value::is_string),
+        "missing string 'error' key: {parsed}"
+    );
+}
+
 #[test]
 fn unknown_command_fails() {
     polymarket().arg("nonexistent").assert().failure();
+}
+
+#[test]
+fn json_mode_formats_unknown_command_parse_error() {
+    assert_json_parse_error(&["--output", "json", "nonexistent"]);
+}
+
+#[test]
+fn json_mode_is_detected_after_invalid_command() {
+    assert_json_parse_error(&["nonexistent", "--output=json"]);
+}
+
+#[test]
+fn json_short_form_formats_validation_error() {
+    assert_json_parse_error(&["markets", "get", "-ojson"]);
+}
+
+#[test]
+fn table_mode_parse_error_keeps_clap_output() {
+    polymarket()
+        .arg("nonexistent")
+        .assert()
+        .code(2)
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::starts_with("error:").and(predicate::str::contains("Usage:")));
+}
+
+#[test]
+fn json_flag_does_not_change_help_semantics() {
+    polymarket()
+        .args(["--output", "json", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage:"))
+        .stderr(predicate::str::is_empty());
 }
 
 #[test]
