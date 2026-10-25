@@ -667,17 +667,18 @@ pub async fn execute(
             order_type,
             post_only,
         } => {
-            let signer = auth::resolve_signer(private_key)?;
-            let client = auth::authenticate_with_signer(&signer, signature_type).await?;
-
+            let token_id = parse_token_id(&token)?;
             let price_dec =
                 Decimal::from_str(&price).map_err(|_| anyhow::anyhow!("Invalid price: {price}"))?;
             let size_dec =
                 Decimal::from_str(&size).map_err(|_| anyhow::anyhow!("Invalid size: {size}"))?;
 
+            let signer = auth::resolve_signer(private_key)?;
+            let client = auth::authenticate_with_signer(&signer, signature_type).await?;
+
             let order = client
                 .limit_order()
-                .token_id(parse_token_id(&token)?)
+                .token_id(token_id)
                 .side(Side::from(side))
                 .price(price_dec)
                 .size(size_dec)
@@ -700,9 +701,6 @@ pub async fn execute(
             sizes,
             order_type,
         } => {
-            let signer = auth::resolve_signer(private_key)?;
-            let client = auth::authenticate_with_signer(&signer, signature_type).await?;
-
             let token_ids = parse_token_ids(&tokens)?;
             let price_strs: Vec<&str> = prices.split(',').map(str::trim).collect();
             let size_strs: Vec<&str> = sizes.split(',').map(str::trim).collect();
@@ -713,18 +711,26 @@ pub async fn execute(
                 );
             }
 
+            let prices = price_strs
+                .into_iter()
+                .map(|price| {
+                    Decimal::from_str(price).map_err(|_| anyhow::anyhow!("Invalid price: {price}"))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let sizes = size_strs
+                .into_iter()
+                .map(|size| {
+                    Decimal::from_str(size).map_err(|_| anyhow::anyhow!("Invalid size: {size}"))
+                })
+                .collect::<Result<Vec<_>>>()?;
+
             let sdk_side = Side::from(side);
             let sdk_order_type = OrderType::from(order_type);
+            let signer = auth::resolve_signer(private_key)?;
+            let client = auth::authenticate_with_signer(&signer, signature_type).await?;
 
             let mut signed_orders = Vec::with_capacity(token_ids.len());
-            for ((token_id, price_str), size_str) in
-                token_ids.into_iter().zip(price_strs).zip(size_strs)
-            {
-                let price_dec = Decimal::from_str(price_str)
-                    .map_err(|_| anyhow::anyhow!("Invalid price: {price_str}"))?;
-                let size_dec = Decimal::from_str(size_str)
-                    .map_err(|_| anyhow::anyhow!("Invalid size: {size_str}"))?;
-
+            for ((token_id, price_dec), size_dec) in token_ids.into_iter().zip(prices).zip(sizes) {
                 let order = client
                     .limit_order()
                     .token_id(token_id)
@@ -747,9 +753,7 @@ pub async fn execute(
             amount,
             order_type,
         } => {
-            let signer = auth::resolve_signer(private_key)?;
-            let client = auth::authenticate_with_signer(&signer, signature_type).await?;
-
+            let token_id = parse_token_id(&token)?;
             let amount_dec = Decimal::from_str(&amount)
                 .map_err(|_| anyhow::anyhow!("Invalid amount: {amount}"))?;
             let sdk_side = Side::from(side);
@@ -759,9 +763,12 @@ pub async fn execute(
                 Amount::usdc(amount_dec)?
             };
 
+            let signer = auth::resolve_signer(private_key)?;
+            let client = auth::authenticate_with_signer(&signer, signature_type).await?;
+
             let order = client
                 .market_order()
-                .token_id(parse_token_id(&token)?)
+                .token_id(token_id)
                 .side(sdk_side)
                 .amount(parsed_amount)
                 .order_type(OrderType::from(order_type))
@@ -889,26 +896,23 @@ pub async fn execute(
 
         // ── Authenticated reward commands ────────────────────────────────
         ClobCommand::Rewards { date, cursor } => {
+            let date = parse_date(&date)?;
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
-            let result = client
-                .earnings_for_user_for_day(parse_date(&date)?, cursor)
-                .await?;
+            let result = client.earnings_for_user_for_day(date, cursor).await?;
             print_rewards(&result, output)?;
         }
 
         ClobCommand::Earnings { date } => {
+            let date = parse_date(&date)?;
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
-            let result = client
-                .total_earnings_for_user_for_day(parse_date(&date)?)
-                .await?;
+            let result = client.total_earnings_for_user_for_day(date).await?;
             print_earnings(&result, output)?;
         }
 
         ClobCommand::EarningsMarkets { date, cursor } => {
+            let date = parse_date(&date)?;
+            let request = UserRewardsEarningRequest::builder().date(date).build();
             let client = auth::authenticated_clob_client(private_key, signature_type).await?;
-            let request = UserRewardsEarningRequest::builder()
-                .date(parse_date(&date)?)
-                .build();
             let result = client
                 .user_earnings_and_markets_config(&request, cursor)
                 .await?;

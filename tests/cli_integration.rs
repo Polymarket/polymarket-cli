@@ -2,6 +2,101 @@
 
 use assert_cmd::Command;
 use predicates::prelude::*;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
+
+const SYNTHETIC_PRIVATE_KEY: &str =
+    "0x0101010101010101010101010101010101010101010101010101010101010101";
+
+struct RequestFixture {
+    host: String,
+    requests: Arc<AtomicUsize>,
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+impl RequestFixture {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let host = format!("http://{}", listener.local_addr().unwrap());
+        let requests = Arc::new(AtomicUsize::new(0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread_requests = Arc::clone(&requests);
+        let thread_stop = Arc::clone(&stop);
+        let thread = thread::spawn(move || {
+            while !thread_stop.load(Ordering::Relaxed) {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        thread_requests.fetch_add(1, Ordering::Relaxed);
+                        respond_with_server_error(&mut stream);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("fixture accept failed: {error}"),
+                }
+            }
+        });
+
+        Self {
+            host,
+            requests,
+            stop,
+            thread: Some(thread),
+        }
+    }
+
+    fn command(&self) -> Command {
+        let mut command = polymarket();
+        command
+            .env("POLYMARKET_CLOB_HOST", &self.host)
+            .arg("--private-key")
+            .arg(SYNTHETIC_PRIVATE_KEY);
+        command
+    }
+
+    fn request_count(&self) -> usize {
+        self.requests.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for RequestFixture {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() {
+            thread.join().unwrap();
+        }
+    }
+}
+
+fn respond_with_server_error(stream: &mut TcpStream) {
+    stream
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .unwrap();
+    let mut buffer = [0; 4096];
+    let _ = stream.read(&mut buffer);
+    stream
+        .write_all(
+            b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        )
+        .unwrap();
+}
+
+fn assert_clob_input_rejected_before_request(args: &[&str], error: &str) {
+    let fixture = RequestFixture::start();
+    fixture
+        .command()
+        .args(args)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(error));
+    assert_eq!(fixture.request_count(), 0, "unexpected network request");
+}
 
 fn polymarket() -> Command {
     let mut cmd = Command::cargo_bin("polymarket").unwrap();
@@ -247,6 +342,184 @@ fn clob_help_lists_subcommands() {
                 .and(predicate::str::contains("midpoint"))
                 .and(predicate::str::contains("trades")),
         );
+}
+
+#[test]
+fn authenticated_clob_commands_validate_local_inputs_before_requests() {
+    let cases: &[(&[&str], &str)] = &[
+        (
+            &[
+                "clob",
+                "create-order",
+                "--token",
+                "1",
+                "--side",
+                "buy",
+                "--price",
+                "not-a-decimal",
+                "--size",
+                "1",
+            ],
+            "Invalid price: not-a-decimal",
+        ),
+        (
+            &[
+                "clob",
+                "create-order",
+                "--token",
+                "not-a-token",
+                "--side",
+                "buy",
+                "--price",
+                "0.5",
+                "--size",
+                "1",
+            ],
+            "Invalid token ID: not-a-token",
+        ),
+        (
+            &[
+                "clob",
+                "create-order",
+                "--token",
+                "1",
+                "--side",
+                "buy",
+                "--price",
+                "0.5",
+                "--size",
+                "not-a-decimal",
+            ],
+            "Invalid size: not-a-decimal",
+        ),
+        (
+            &[
+                "clob",
+                "post-orders",
+                "--tokens",
+                "not-a-token,2",
+                "--side",
+                "buy",
+                "--prices",
+                "0.5,0.6",
+                "--sizes",
+                "1,2",
+            ],
+            "Invalid token ID: not-a-token",
+        ),
+        (
+            &[
+                "clob",
+                "post-orders",
+                "--tokens",
+                "1,2",
+                "--side",
+                "buy",
+                "--prices",
+                "0.5",
+                "--sizes",
+                "1,2",
+            ],
+            "tokens, prices, and sizes must have the same number",
+        ),
+        (
+            &[
+                "clob",
+                "post-orders",
+                "--tokens",
+                "1,2",
+                "--side",
+                "buy",
+                "--prices",
+                "0.5,not-a-decimal",
+                "--sizes",
+                "1,2",
+            ],
+            "Invalid price: not-a-decimal",
+        ),
+        (
+            &[
+                "clob",
+                "post-orders",
+                "--tokens",
+                "1,2",
+                "--side",
+                "buy",
+                "--prices",
+                "0.5,0.6",
+                "--sizes",
+                "1,not-a-decimal",
+            ],
+            "Invalid size: not-a-decimal",
+        ),
+        (
+            &[
+                "clob",
+                "market-order",
+                "--token",
+                "not-a-token",
+                "--side",
+                "buy",
+                "--amount",
+                "1",
+            ],
+            "Invalid token ID: not-a-token",
+        ),
+        (
+            &[
+                "clob",
+                "market-order",
+                "--token",
+                "1",
+                "--side",
+                "buy",
+                "--amount",
+                "not-a-decimal",
+            ],
+            "Invalid amount: not-a-decimal",
+        ),
+        (
+            &["clob", "rewards", "--date", "not-a-date"],
+            "Invalid date: expected YYYY-MM-DD format",
+        ),
+        (
+            &["clob", "earnings", "--date", "not-a-date"],
+            "Invalid date: expected YYYY-MM-DD format",
+        ),
+        (
+            &["clob", "earnings-markets", "--date", "not-a-date"],
+            "Invalid date: expected YYYY-MM-DD format",
+        ),
+    ];
+
+    for (args, error) in cases {
+        assert_clob_input_rejected_before_request(args, error);
+    }
+}
+
+#[test]
+fn valid_authenticated_clob_input_still_attempts_authentication() {
+    let fixture = RequestFixture::start();
+    fixture
+        .command()
+        .args([
+            "clob",
+            "create-order",
+            "--token",
+            "1",
+            "--side",
+            "buy",
+            "--price",
+            "0.5",
+            "--size",
+            "1",
+        ])
+        .assert()
+        .failure();
+    assert!(
+        fixture.request_count() > 0,
+        "authentication was not attempted"
+    );
 }
 
 #[test]
