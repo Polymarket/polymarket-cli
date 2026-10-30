@@ -1,4 +1,4 @@
-use polymarket_client_sdk::gamma::types::response::PublicProfile;
+use polymarket_client_sdk_v2::gamma::types::response::PublicProfile;
 
 use super::{OutputFormat, detail_field, print_detail_table, print_json};
 

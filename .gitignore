@@ -1,5 +1,6 @@
 
 rs-clob-client/
+rs-clob-client-v2-main/
 
 /target/
 **/target/
@@ -17,5 +18,10 @@ rs-clob-client/
 
 *.local
 .env
+.env.e2e.*
+.e2e/
+e2e-output/
+e2e-*.log
+scripts/e2e.sh
 
 CLAUDE.md

@@ -1,19 +1,72 @@
 use alloy::primitives::U256;
+use alloy::sol;
+use alloy::sol_types::SolCall;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::ctf::types::{
-    CollectionIdRequest, ConditionIdRequest, MergePositionsRequest, PositionIdRequest,
-    RedeemNegRiskRequest, RedeemPositionsRequest, SplitPositionRequest,
-};
-use polymarket_client_sdk::types::{Address, B256};
-use polymarket_client_sdk::{POLYGON, ctf};
+use polymarket_client_sdk_v2::types::{Address, B256};
 use rust_decimal::Decimal;
 
 use crate::auth;
 use crate::output::OutputFormat;
 use crate::output::ctf as ctf_output;
 
-use super::{USDC_ADDRESS_STR, USDC_DECIMALS};
+use super::proxy;
+use super::{
+    COLLATERAL_ADDRESS_STR, COLLATERAL_DECIMALS, COLLATERAL_SYMBOL, CONDITIONAL_TOKENS,
+    NEG_RISK_ADAPTER,
+};
+
+sol! {
+    #[sol(rpc)]
+    interface IConditionalTokens {
+        function getConditionId(
+            address oracle,
+            bytes32 questionId,
+            uint256 outcomeSlotCount
+        ) external pure returns (bytes32);
+
+        function getCollectionId(
+            bytes32 parentCollectionId,
+            bytes32 conditionId,
+            uint256 indexSet
+        ) external view returns (bytes32);
+
+        function getPositionId(
+            address collateralToken,
+            bytes32 collectionId
+        ) external view returns (uint256);
+
+        function splitPosition(
+            address collateralToken,
+            bytes32 parentCollectionId,
+            bytes32 conditionId,
+            uint256[] calldata partition,
+            uint256 amount
+        ) external;
+
+        function mergePositions(
+            address collateralToken,
+            bytes32 parentCollectionId,
+            bytes32 conditionId,
+            uint256[] calldata partition,
+            uint256 amount
+        ) external;
+
+        function redeemPositions(
+            address collateralToken,
+            bytes32 parentCollectionId,
+            bytes32 conditionId,
+            uint256[] calldata indexSets
+        ) external;
+    }
+
+    interface INegRiskAdapter {
+        function redeemPositions(
+            bytes32 conditionId,
+            uint256[] calldata amounts
+        ) external;
+    }
+}
 
 #[derive(Args)]
 pub struct CtfArgs {
@@ -28,11 +81,11 @@ pub enum CtfCommand {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
         condition: B256,
-        /// Amount in USDC (e.g. 10 for $10)
+        /// Amount in pUSD (e.g. 10 for $10)
         #[arg(long)]
         amount: String,
-        /// Collateral token address (defaults to USDC)
-        #[arg(long, default_value = USDC_ADDRESS_STR)]
+        /// Collateral token address (defaults to pUSD)
+        #[arg(long, default_value = COLLATERAL_ADDRESS_STR)]
         collateral: Address,
         /// Custom partition as comma-separated index sets (e.g. "1,2" for binary, "1,2,4" for 3-outcome)
         #[arg(long)]
@@ -46,11 +99,11 @@ pub enum CtfCommand {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
         condition: B256,
-        /// Amount in USDC (e.g. 10 for $10)
+        /// Amount in pUSD (e.g. 10 for $10)
         #[arg(long)]
         amount: String,
-        /// Collateral token address (defaults to USDC)
-        #[arg(long, default_value = USDC_ADDRESS_STR)]
+        /// Collateral token address (defaults to pUSD)
+        #[arg(long, default_value = COLLATERAL_ADDRESS_STR)]
         collateral: Address,
         /// Custom partition as comma-separated index sets (e.g. "1,2" for binary, "1,2,4" for 3-outcome)
         #[arg(long)]
@@ -64,8 +117,8 @@ pub enum CtfCommand {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
         condition: B256,
-        /// Collateral token address (defaults to USDC)
-        #[arg(long, default_value = USDC_ADDRESS_STR)]
+        /// Collateral token address (defaults to pUSD)
+        #[arg(long, default_value = COLLATERAL_ADDRESS_STR)]
         collateral: Address,
         /// Custom index sets as comma-separated values (e.g. "1,2" for binary, "1" for YES only)
         #[arg(long)]
@@ -79,7 +132,7 @@ pub enum CtfCommand {
         /// Condition ID (0x-prefixed 32-byte hex)
         #[arg(long)]
         condition: B256,
-        /// Comma-separated amounts in USDC for each outcome (e.g. "10,5")
+        /// Comma-separated amounts in pUSD for each outcome (e.g. "10,5")
         #[arg(long)]
         amounts: String,
     },
@@ -109,8 +162,8 @@ pub enum CtfCommand {
     },
     /// Calculate a position ID (ERC1155 token ID) from collateral and collection
     PositionId {
-        /// Collateral token address (defaults to USDC)
-        #[arg(long, default_value = USDC_ADDRESS_STR)]
+        /// Collateral token address (defaults to pUSD)
+        #[arg(long, default_value = COLLATERAL_ADDRESS_STR)]
         collateral: Address,
         /// Collection ID (0x-prefixed 32-byte hex)
         #[arg(long)]
@@ -118,12 +171,12 @@ pub enum CtfCommand {
     },
 }
 
-fn usdc_to_raw(val: Decimal) -> Result<U256> {
-    let multiplier = Decimal::from(10u64.pow(USDC_DECIMALS));
+fn collateral_to_raw(val: Decimal) -> Result<U256> {
+    let multiplier = Decimal::from(10u64.pow(COLLATERAL_DECIMALS));
     let raw = val * multiplier;
     anyhow::ensure!(
         raw.fract().is_zero(),
-        "Amount {val} exceeds USDC precision (max 6 decimal places)"
+        "Amount {val} exceeds {COLLATERAL_SYMBOL} precision (max {COLLATERAL_DECIMALS} decimal places)"
     );
     let raw_u64: u64 = raw
         .try_into()
@@ -131,13 +184,13 @@ fn usdc_to_raw(val: Decimal) -> Result<U256> {
     Ok(U256::from(raw_u64))
 }
 
-fn parse_usdc_amount(s: &str) -> Result<U256> {
+fn parse_collateral_amount(s: &str) -> Result<U256> {
     let val: Decimal = s.trim().parse().context(format!("Invalid amount: {s}"))?;
     anyhow::ensure!(val > Decimal::ZERO, "Amount must be positive");
-    usdc_to_raw(val)
+    collateral_to_raw(val)
 }
 
-fn parse_usdc_amounts(s: &str) -> Result<Vec<U256>> {
+fn parse_collateral_amounts(s: &str) -> Result<Vec<U256>> {
     s.split(',')
         .map(|part| {
             let trimmed = part.trim();
@@ -148,7 +201,7 @@ fn parse_usdc_amounts(s: &str) -> Result<Vec<U256>> {
                 val >= Decimal::ZERO,
                 "Amount must be non-negative: {trimmed}"
             );
-            usdc_to_raw(val)
+            collateral_to_raw(val)
         })
         .collect()
 }
@@ -171,7 +224,12 @@ fn binary_u256_vec() -> Vec<U256> {
     DEFAULT_BINARY_SETS.iter().map(|&n| U256::from(n)).collect()
 }
 
-pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&str>) -> Result<()> {
+pub async fn execute(
+    args: CtfArgs,
+    output: OutputFormat,
+    private_key: Option<&str>,
+    signature_type: Option<&str>,
+) -> Result<()> {
     match args.command {
         CtfCommand::Split {
             condition,
@@ -180,30 +238,29 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             partition,
             parent_collection,
         } => {
-            let usdc_amount = parse_usdc_amount(&amount)?;
+            let collateral_amount = parse_collateral_amount(&amount)?;
             let parent = parent_collection.unwrap_or_default();
             let partition = match partition {
                 Some(p) => parse_u256_csv(&p)?,
                 None => binary_u256_vec(),
             };
 
-            let provider = auth::create_provider(private_key).await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
+            let use_proxy = proxy::is_proxy_mode(signature_type)?;
+            let calldata = IConditionalTokens::splitPositionCall {
+                collateralToken: collateral,
+                parentCollectionId: parent,
+                conditionId: condition,
+                partition,
+                amount: collateral_amount,
+            }
+            .abi_encode();
 
-            let req = SplitPositionRequest::builder()
-                .collateral_token(collateral)
-                .parent_collection_id(parent)
-                .condition_id(condition)
-                .partition(partition)
-                .amount(usdc_amount)
-                .build();
+            let (tx_hash, block_number) =
+                proxy::send_call(private_key, use_proxy, CONDITIONAL_TOKENS, calldata)
+                    .await
+                    .context("Split position failed")?;
 
-            let resp = client
-                .split_position(&req)
-                .await
-                .context("Split position failed")?;
-
-            ctf_output::print_tx_result("split", resp.transaction_hash, resp.block_number, &output)
+            ctf_output::print_tx_result("split", tx_hash, block_number, &output)
         }
         CtfCommand::Merge {
             condition,
@@ -212,30 +269,29 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             partition,
             parent_collection,
         } => {
-            let usdc_amount = parse_usdc_amount(&amount)?;
+            let collateral_amount = parse_collateral_amount(&amount)?;
             let parent = parent_collection.unwrap_or_default();
             let partition = match partition {
                 Some(p) => parse_u256_csv(&p)?,
                 None => binary_u256_vec(),
             };
 
-            let provider = auth::create_provider(private_key).await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
+            let use_proxy = proxy::is_proxy_mode(signature_type)?;
+            let calldata = IConditionalTokens::mergePositionsCall {
+                collateralToken: collateral,
+                parentCollectionId: parent,
+                conditionId: condition,
+                partition,
+                amount: collateral_amount,
+            }
+            .abi_encode();
 
-            let req = MergePositionsRequest::builder()
-                .collateral_token(collateral)
-                .parent_collection_id(parent)
-                .condition_id(condition)
-                .partition(partition)
-                .amount(usdc_amount)
-                .build();
+            let (tx_hash, block_number) =
+                proxy::send_call(private_key, use_proxy, CONDITIONAL_TOKENS, calldata)
+                    .await
+                    .context("Merge positions failed")?;
 
-            let resp = client
-                .merge_positions(&req)
-                .await
-                .context("Merge positions failed")?;
-
-            ctf_output::print_tx_result("merge", resp.transaction_hash, resp.block_number, &output)
+            ctf_output::print_tx_result("merge", tx_hash, block_number, &output)
         }
         CtfCommand::Redeem {
             condition,
@@ -249,45 +305,38 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
                 None => binary_u256_vec(),
             };
 
-            let provider = auth::create_provider(private_key).await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
+            let use_proxy = proxy::is_proxy_mode(signature_type)?;
+            let calldata = IConditionalTokens::redeemPositionsCall {
+                collateralToken: collateral,
+                parentCollectionId: parent,
+                conditionId: condition,
+                indexSets: index_sets,
+            }
+            .abi_encode();
 
-            let req = RedeemPositionsRequest::builder()
-                .collateral_token(collateral)
-                .parent_collection_id(parent)
-                .condition_id(condition)
-                .index_sets(index_sets)
-                .build();
+            let (tx_hash, block_number) =
+                proxy::send_call(private_key, use_proxy, CONDITIONAL_TOKENS, calldata)
+                    .await
+                    .context("Redeem positions failed")?;
 
-            let resp = client
-                .redeem_positions(&req)
-                .await
-                .context("Redeem positions failed")?;
-
-            ctf_output::print_tx_result("redeem", resp.transaction_hash, resp.block_number, &output)
+            ctf_output::print_tx_result("redeem", tx_hash, block_number, &output)
         }
         CtfCommand::RedeemNegRisk { condition, amounts } => {
-            let amounts = parse_usdc_amounts(&amounts)?;
+            let amounts = parse_collateral_amounts(&amounts)?;
 
-            let provider = auth::create_provider(private_key).await?;
-            let client = ctf::Client::with_neg_risk(provider, POLYGON)?;
+            let use_proxy = proxy::is_proxy_mode(signature_type)?;
+            let calldata = INegRiskAdapter::redeemPositionsCall {
+                conditionId: condition,
+                amounts,
+            }
+            .abi_encode();
 
-            let req = RedeemNegRiskRequest::builder()
-                .condition_id(condition)
-                .amounts(amounts)
-                .build();
+            let (tx_hash, block_number) =
+                proxy::send_call(private_key, use_proxy, NEG_RISK_ADAPTER, calldata)
+                    .await
+                    .context("Redeem neg-risk positions failed")?;
 
-            let resp = client
-                .redeem_neg_risk(&req)
-                .await
-                .context("Redeem neg-risk positions failed")?;
-
-            ctf_output::print_tx_result(
-                "redeem-neg-risk",
-                resp.transaction_hash,
-                resp.block_number,
-                &output,
-            )
+            ctf_output::print_tx_result("redeem-neg-risk", tx_hash, block_number, &output)
         }
         CtfCommand::ConditionId {
             oracle,
@@ -295,16 +344,12 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             outcomes,
         } => {
             let provider = auth::create_readonly_provider().await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
-
-            let req = ConditionIdRequest::builder()
-                .oracle(oracle)
-                .question_id(question)
-                .outcome_slot_count(U256::from(outcomes))
-                .build();
-
-            let resp = client.condition_id(&req).await?;
-            ctf_output::print_condition_id(resp.condition_id, &output)
+            let contract = IConditionalTokens::new(CONDITIONAL_TOKENS, provider);
+            let condition_id = contract
+                .getConditionId(oracle, question, U256::from(outcomes))
+                .call()
+                .await?;
+            ctf_output::print_condition_id(condition_id, &output)
         }
         CtfCommand::CollectionId {
             condition,
@@ -314,31 +359,24 @@ pub async fn execute(args: CtfArgs, output: OutputFormat, private_key: Option<&s
             let parent = parent_collection.unwrap_or_default();
 
             let provider = auth::create_readonly_provider().await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
-
-            let req = CollectionIdRequest::builder()
-                .parent_collection_id(parent)
-                .condition_id(condition)
-                .index_set(U256::from(index_set))
-                .build();
-
-            let resp = client.collection_id(&req).await?;
-            ctf_output::print_collection_id(resp.collection_id, &output)
+            let contract = IConditionalTokens::new(CONDITIONAL_TOKENS, provider);
+            let collection_id = contract
+                .getCollectionId(parent, condition, U256::from(index_set))
+                .call()
+                .await?;
+            ctf_output::print_collection_id(collection_id, &output)
         }
         CtfCommand::PositionId {
             collateral,
             collection,
         } => {
             let provider = auth::create_readonly_provider().await?;
-            let client = ctf::Client::new(provider, POLYGON)?;
-
-            let req = PositionIdRequest::builder()
-                .collateral_token(collateral)
-                .collection_id(collection)
-                .build();
-
-            let resp = client.position_id(&req).await?;
-            ctf_output::print_position_id(resp.position_id, &output)
+            let contract = IConditionalTokens::new(CONDITIONAL_TOKENS, provider);
+            let position_id = contract
+                .getPositionId(collateral, collection)
+                .call()
+                .await?;
+            ctf_output::print_position_id(position_id, &output)
         }
     }
 }
@@ -348,59 +386,61 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_usdc_amount_whole_dollars() {
-        let result = parse_usdc_amount("10").unwrap();
+    fn parse_collateral_amount_whole_dollars() {
+        let result = parse_collateral_amount("10").unwrap();
         assert_eq!(result, U256::from(10_000_000u64));
     }
 
     #[test]
-    fn parse_usdc_amount_fractional() {
-        let result = parse_usdc_amount("1.5").unwrap();
+    fn parse_collateral_amount_fractional() {
+        let result = parse_collateral_amount("1.5").unwrap();
         assert_eq!(result, U256::from(1_500_000u64));
     }
 
     #[test]
-    fn parse_usdc_amount_small() {
-        let result = parse_usdc_amount("0.01").unwrap();
+    fn parse_collateral_amount_small() {
+        let result = parse_collateral_amount("0.01").unwrap();
         assert_eq!(result, U256::from(10_000u64));
     }
 
     #[test]
-    fn parse_usdc_amount_smallest_unit() {
-        let result = parse_usdc_amount("0.000001").unwrap();
+    fn parse_collateral_amount_smallest_unit() {
+        let result = parse_collateral_amount("0.000001").unwrap();
         assert_eq!(result, U256::from(1u64));
     }
 
     #[test]
-    fn parse_usdc_amount_rejects_excess_precision() {
-        let err = parse_usdc_amount("1.0000001").unwrap_err().to_string();
+    fn parse_collateral_amount_rejects_excess_precision() {
+        let err = parse_collateral_amount("1.0000001")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("precision"), "got: {err}");
     }
 
     #[test]
-    fn parse_usdc_amount_rejects_zero() {
-        assert!(parse_usdc_amount("0").is_err());
+    fn parse_collateral_amount_rejects_zero() {
+        assert!(parse_collateral_amount("0").is_err());
     }
 
     #[test]
-    fn parse_usdc_amount_rejects_negative() {
-        assert!(parse_usdc_amount("-5").is_err());
+    fn parse_collateral_amount_rejects_negative() {
+        assert!(parse_collateral_amount("-5").is_err());
     }
 
     #[test]
-    fn parse_usdc_amount_rejects_non_numeric() {
-        assert!(parse_usdc_amount("abc").is_err());
+    fn parse_collateral_amount_rejects_non_numeric() {
+        assert!(parse_collateral_amount("abc").is_err());
     }
 
     #[test]
-    fn parse_usdc_amounts_single() {
-        let result = parse_usdc_amounts("10").unwrap();
+    fn parse_collateral_amounts_single() {
+        let result = parse_collateral_amounts("10").unwrap();
         assert_eq!(result, vec![U256::from(10_000_000u64)]);
     }
 
     #[test]
-    fn parse_usdc_amounts_multiple() {
-        let result = parse_usdc_amounts("10,5").unwrap();
+    fn parse_collateral_amounts_multiple() {
+        let result = parse_collateral_amounts("10,5").unwrap();
         assert_eq!(
             result,
             vec![U256::from(10_000_000u64), U256::from(5_000_000u64)]
@@ -408,8 +448,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_usdc_amounts_with_spaces() {
-        let result = parse_usdc_amounts("10, 5, 2.5").unwrap();
+    fn parse_collateral_amounts_with_spaces() {
+        let result = parse_collateral_amounts("10, 5, 2.5").unwrap();
         assert_eq!(
             result,
             vec![
@@ -421,19 +461,19 @@ mod tests {
     }
 
     #[test]
-    fn parse_usdc_amounts_zero_is_allowed() {
-        let result = parse_usdc_amounts("0,10").unwrap();
+    fn parse_collateral_amounts_zero_is_allowed() {
+        let result = parse_collateral_amounts("0,10").unwrap();
         assert_eq!(result, vec![U256::from(0u64), U256::from(10_000_000u64)]);
     }
 
     #[test]
-    fn parse_usdc_amounts_rejects_negative() {
-        assert!(parse_usdc_amounts("10,-5").is_err());
+    fn parse_collateral_amounts_rejects_negative() {
+        assert!(parse_collateral_amounts("10,-5").is_err());
     }
 
     #[test]
-    fn parse_usdc_amounts_rejects_non_numeric() {
-        assert!(parse_usdc_amounts("abc").is_err());
+    fn parse_collateral_amounts_rejects_non_numeric() {
+        assert!(parse_collateral_amounts("abc").is_err());
     }
 
     #[test]

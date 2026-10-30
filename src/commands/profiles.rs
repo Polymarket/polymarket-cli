@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::gamma::{self, types::request::PublicProfileRequest};
-use polymarket_client_sdk::types::Address;
+use polymarket_client_sdk_v2::gamma::{self, types::request::PublicProfileRequest};
+use polymarket_client_sdk_v2::types::Address;
 
 use crate::output::OutputFormat;
 use crate::output::profiles::print_profile;

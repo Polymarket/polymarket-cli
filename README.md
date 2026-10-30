@@ -332,14 +332,14 @@ polymarket data builder-volume --period month
 
 ### Contract Approvals
 
-Before trading, Polymarket contracts need ERC-20 (USDC) and ERC-1155 (CTF token) approvals.
+Before trading, Polymarket contracts need ERC-20 (pUSD) and ERC-1155 (CTF token) approvals.
 
 ```bash
 # Check current approvals (read-only)
 polymarket approve check
 polymarket approve check 0xSOME_ADDRESS
 
-# Approve all contracts (sends 6 on-chain transactions, needs MATIC for gas)
+# Approve all contracts (sends on-chain transactions, needs MATIC for gas)
 polymarket approve set
 ```
 
@@ -348,10 +348,10 @@ polymarket approve set
 Split, merge, and redeem conditional tokens directly on-chain.
 
 ```bash
-# Split $10 USDC into YES/NO tokens
+# Split $10 pUSD into YES/NO tokens
 polymarket ctf split --condition 0xCONDITION... --amount 10
 
-# Merge tokens back to USDC
+# Merge tokens back to pUSD
 polymarket ctf merge --condition 0xCONDITION... --amount 10
 
 # Redeem winning tokens after resolution
@@ -366,7 +366,7 @@ polymarket ctf collection-id --condition 0xCONDITION... --index-set 1
 polymarket ctf position-id --collection 0xCOLLECTION...
 ```
 
-`--amount` is in USDC (e.g., `10` = $10). The `--partition` flag defaults to binary (`1,2`). On-chain operations require MATIC for gas on Polygon.
+`--amount` is in pUSD (e.g., `10` = $10). The `--partition` flag defaults to binary (`1,2`). On-chain operations require MATIC for gas on Polygon.
 
 ### Bridge
 

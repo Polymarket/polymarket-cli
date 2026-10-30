@@ -3,17 +3,19 @@
 
 use alloy::primitives::U256;
 use alloy::sol;
+use alloy::sol_types::SolCall;
 use anyhow::{Context, Result};
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::types::{Address, address};
-use polymarket_client_sdk::{POLYGON, contract_config};
+use polymarket_client_sdk_v2::types::Address;
 
 use crate::auth;
 use crate::output::OutputFormat;
 use crate::output::approve::{ApprovalStatus, print_approval_status, print_tx_result};
 
-/// Polygon USDC (same address as `USDC_ADDRESS_STR`; `address!` requires a literal).
-const USDC_ADDRESS: Address = address!("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174");
+use super::{
+    COLLATERAL_SYMBOL, CONDITIONAL_TOKENS, CTF_COLLATERAL_ADAPTER, CTF_EXCHANGE, NEG_RISK_ADAPTER,
+    NEG_RISK_CTF_COLLATERAL_ADAPTER, NEG_RISK_CTF_EXCHANGE, proxy,
+};
 
 sol! {
     #[sol(rpc)]
@@ -49,85 +51,112 @@ pub enum ApproveCommand {
 struct ApprovalTarget {
     name: &'static str,
     address: Address,
+    needs_collateral_allowance: bool,
+    needs_ctf_operator: bool,
 }
 
 fn approval_targets() -> Result<Vec<ApprovalTarget>> {
-    let config = contract_config(POLYGON, false).context("No contract config for Polygon")?;
-    let neg_risk_config =
-        contract_config(POLYGON, true).context("No neg-risk contract config for Polygon")?;
-
-    let mut targets = vec![
+    Ok(vec![
         ApprovalTarget {
             name: "CTF Exchange",
-            address: config.exchange,
+            address: CTF_EXCHANGE,
+            needs_collateral_allowance: true,
+            needs_ctf_operator: true,
         },
         ApprovalTarget {
             name: "Neg Risk Exchange",
-            address: neg_risk_config.exchange,
+            address: NEG_RISK_CTF_EXCHANGE,
+            needs_collateral_allowance: true,
+            needs_ctf_operator: true,
         },
-    ];
-
-    if let Some(adapter) = neg_risk_config.neg_risk_adapter {
-        targets.push(ApprovalTarget {
+        ApprovalTarget {
             name: "Neg Risk Adapter",
-            address: adapter,
-        });
-    }
-
-    Ok(targets)
+            address: NEG_RISK_ADAPTER,
+            needs_collateral_allowance: true,
+            needs_ctf_operator: true,
+        },
+        ApprovalTarget {
+            name: "Conditional Tokens",
+            address: CONDITIONAL_TOKENS,
+            needs_collateral_allowance: true,
+            needs_ctf_operator: false,
+        },
+        ApprovalTarget {
+            name: "CTF Collateral Adapter",
+            address: CTF_COLLATERAL_ADAPTER,
+            needs_collateral_allowance: true,
+            needs_ctf_operator: true,
+        },
+        ApprovalTarget {
+            name: "Neg Risk CTF Collateral Adapter",
+            address: NEG_RISK_CTF_COLLATERAL_ADAPTER,
+            needs_collateral_allowance: true,
+            needs_ctf_operator: true,
+        },
+    ])
 }
 
 pub async fn execute(
     args: ApproveArgs,
     output: OutputFormat,
     private_key: Option<&str>,
+    signature_type: Option<&str>,
 ) -> Result<()> {
     match args.command {
-        ApproveCommand::Check { address } => check(address, private_key, output).await,
-        ApproveCommand::Set => set(private_key, output).await,
+        ApproveCommand::Check { address } => {
+            check(address, private_key, signature_type, output).await
+        }
+        ApproveCommand::Set => set(private_key, signature_type, output).await,
     }
 }
 
 async fn check(
     address_arg: Option<Address>,
     private_key: Option<&str>,
+    signature_type: Option<&str>,
     output: OutputFormat,
 ) -> Result<()> {
     let owner: Address = if let Some(addr) = address_arg {
         addr
+    } else if proxy::is_proxy_mode(signature_type)? {
+        proxy::derive_proxy_address(private_key)?
     } else {
         let signer = auth::resolve_signer(private_key)?;
-        polymarket_client_sdk::auth::Signer::address(&signer)
+        polymarket_client_sdk_v2::auth::Signer::address(&signer)
     };
 
     let provider = auth::create_readonly_provider().await?;
-    let config = contract_config(POLYGON, false).context("No contract config for Polygon")?;
-
-    let usdc = IERC20::new(USDC_ADDRESS, provider.clone());
-    let ctf = IERC1155::new(config.conditional_tokens, provider.clone());
+    let collateral = IERC20::new(super::COLLATERAL_ADDRESS, provider.clone());
+    let ctf = IERC1155::new(CONDITIONAL_TOKENS, provider.clone());
 
     let targets = approval_targets()?;
     let mut statuses = Vec::new();
 
     for target in &targets {
-        let (usdc_allowance, usdc_error) = match usdc.allowance(owner, target.address).call().await
-        {
-            Ok(val) => (val, None),
-            Err(e) => (U256::ZERO, Some(e.to_string())),
+        let (collateral_allowance, collateral_error) = if target.needs_collateral_allowance {
+            match collateral.allowance(owner, target.address).call().await {
+                Ok(val) => (val, None),
+                Err(e) => (U256::ZERO, Some(e.to_string())),
+            }
+        } else {
+            (U256::ZERO, None)
         };
 
-        let (ctf_approved, ctf_error) =
+        let (ctf_approved, ctf_error) = if target.needs_ctf_operator {
             match ctf.isApprovedForAll(owner, target.address).call().await {
-                Ok(val) => (val, None),
-                Err(e) => (false, Some(e.to_string())),
-            };
+                Ok(val) => (Some(val), None),
+                Err(e) => (Some(false), Some(e.to_string())),
+            }
+        } else {
+            (None, None)
+        };
 
         statuses.push(ApprovalStatus {
             contract_name: target.name.to_string(),
             contract_address: format!("{}", target.address),
-            usdc_allowance,
+            collateral_allowance,
             ctf_approved,
-            usdc_error,
+            collateral_error,
             ctf_error,
         });
     }
@@ -135,15 +164,19 @@ async fn check(
     print_approval_status(&statuses, &output)
 }
 
-async fn set(private_key: Option<&str>, output: OutputFormat) -> Result<()> {
-    let provider = auth::create_provider(private_key).await?;
-    let config = contract_config(POLYGON, false).context("No contract config for Polygon")?;
-
-    let usdc = IERC20::new(USDC_ADDRESS, provider.clone());
-    let ctf = IERC1155::new(config.conditional_tokens, provider.clone());
-
+async fn set(
+    private_key: Option<&str>,
+    signature_type: Option<&str>,
+    output: OutputFormat,
+) -> Result<()> {
+    let use_proxy = proxy::is_proxy_mode(signature_type)?;
     let targets = approval_targets()?;
-    let total = targets.len() * 2;
+    let total = targets
+        .iter()
+        .map(|target| {
+            usize::from(target.needs_collateral_allowance) + usize::from(target.needs_ctf_operator)
+        })
+        .sum();
 
     if matches!(output, OutputFormat::Table) {
         println!("Approving contracts...\n");
@@ -153,52 +186,56 @@ async fn set(private_key: Option<&str>, output: OutputFormat) -> Result<()> {
     let mut step = 0;
 
     for target in &targets {
-        step += 1;
-        let label = format!("USDC \u{2192} {}", target.name);
-        let tx_hash = usdc
-            .approve(target.address, U256::MAX)
-            .send()
-            .await
-            .context(format!("Failed to send USDC approval for {}", target.name))?
-            .watch()
-            .await
-            .context(format!(
-                "Failed to confirm USDC approval for {}",
-                target.name
-            ))?;
+        if target.needs_collateral_allowance {
+            step += 1;
+            let label = format!("{COLLATERAL_SYMBOL} \u{2192} {}", target.name);
+            let calldata = IERC20::approveCall {
+                spender: target.address,
+                value: U256::MAX,
+            }
+            .abi_encode();
+            let (tx_hash, _) =
+                proxy::send_call(private_key, use_proxy, super::COLLATERAL_ADDRESS, calldata)
+                    .await
+                    .context(format!(
+                        "Failed {COLLATERAL_SYMBOL} approval for {}",
+                        target.name
+                    ))?;
 
-        match output {
-            OutputFormat::Table => print_tx_result(step, total, &label, tx_hash),
-            OutputFormat::Json => results.push(serde_json::json!({
-                "step": step,
-                "type": "erc20",
-                "contract": target.name,
-                "tx_hash": format!("{tx_hash}"),
-            })),
+            match output {
+                OutputFormat::Table => print_tx_result(step, total, &label, tx_hash),
+                OutputFormat::Json => results.push(serde_json::json!({
+                    "step": step,
+                    "type": "erc20",
+                    "asset": COLLATERAL_SYMBOL,
+                    "contract": target.name,
+                    "tx_hash": format!("{tx_hash}"),
+                })),
+            }
         }
 
-        step += 1;
-        let label = format!("CTF  \u{2192} {}", target.name);
-        let tx_hash = ctf
-            .setApprovalForAll(target.address, true)
-            .send()
-            .await
-            .context(format!("Failed to send CTF approval for {}", target.name))?
-            .watch()
-            .await
-            .context(format!(
-                "Failed to confirm CTF approval for {}",
-                target.name
-            ))?;
+        if target.needs_ctf_operator {
+            step += 1;
+            let label = format!("CTF  \u{2192} {}", target.name);
+            let calldata = IERC1155::setApprovalForAllCall {
+                operator: target.address,
+                approved: true,
+            }
+            .abi_encode();
+            let (tx_hash, _) =
+                proxy::send_call(private_key, use_proxy, CONDITIONAL_TOKENS, calldata)
+                    .await
+                    .context(format!("Failed CTF approval for {}", target.name))?;
 
-        match output {
-            OutputFormat::Table => print_tx_result(step, total, &label, tx_hash),
-            OutputFormat::Json => results.push(serde_json::json!({
-                "step": step,
-                "type": "erc1155",
-                "contract": target.name,
-                "tx_hash": format!("{tx_hash}"),
-            })),
+            match output {
+                OutputFormat::Table => print_tx_result(step, total, &label, tx_hash),
+                OutputFormat::Json => results.push(serde_json::json!({
+                    "step": step,
+                    "type": "erc1155",
+                    "contract": target.name,
+                    "tx_hash": format!("{tx_hash}"),
+                })),
+            }
         }
     }
 

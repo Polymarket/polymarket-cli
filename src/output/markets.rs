@@ -1,5 +1,5 @@
-use polymarket_client_sdk::gamma::types::response::Market;
-use polymarket_client_sdk::types::Decimal;
+use polymarket_client_sdk_v2::gamma::types::response::Market;
+use polymarket_client_sdk_v2::types::Decimal;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 

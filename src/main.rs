@@ -82,9 +82,9 @@ async fn main() -> ExitCode {
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
     // Lazy-init so we only pay for the client we actually use.
-    let gamma = std::cell::LazyCell::new(polymarket_client_sdk::gamma::Client::default);
-    let data = std::cell::LazyCell::new(polymarket_client_sdk::data::Client::default);
-    let bridge = std::cell::LazyCell::new(polymarket_client_sdk::bridge::Client::default);
+    let gamma = std::cell::LazyCell::new(polymarket_client_sdk_v2::gamma::Client::default);
+    let data = std::cell::LazyCell::new(polymarket_client_sdk_v2::data::Client::default);
+    let bridge = std::cell::LazyCell::new(polymarket_client_sdk_v2::bridge::Client::default);
 
     match cli.command {
         Commands::Setup => commands::setup::execute(),
@@ -97,7 +97,13 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Profiles(args) => commands::profiles::execute(&gamma, args, cli.output).await,
         Commands::Sports(args) => commands::sports::execute(&gamma, args, cli.output).await,
         Commands::Approve(args) => {
-            commands::approve::execute(args, cli.output, cli.private_key.as_deref()).await
+            commands::approve::execute(
+                args,
+                cli.output,
+                cli.private_key.as_deref(),
+                cli.signature_type.as_deref(),
+            )
+            .await
         }
         Commands::Clob(args) => {
             commands::clob::execute(
@@ -109,7 +115,13 @@ pub(crate) async fn run(cli: Cli) -> anyhow::Result<()> {
             .await
         }
         Commands::Ctf(args) => {
-            commands::ctf::execute(args, cli.output, cli.private_key.as_deref()).await
+            commands::ctf::execute(
+                args,
+                cli.output,
+                cli.private_key.as_deref(),
+                cli.signature_type.as_deref(),
+            )
+            .await
         }
         Commands::Data(args) => commands::data::execute(&data, args, cli.output).await,
         Commands::Bridge(args) => commands::bridge::execute(&bridge, args, cli.output).await,

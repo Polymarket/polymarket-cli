@@ -12,7 +12,7 @@ pub(crate) mod sports;
 pub(crate) mod tags;
 
 use chrono::{DateTime, Utc};
-use polymarket_client_sdk::types::Decimal;
+use polymarket_client_sdk_v2::types::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use tabled::Table;
 use tabled::settings::object::Columns;
@@ -70,10 +70,20 @@ pub(crate) fn print_json(data: &(impl serde::Serialize + ?Sized)) -> anyhow::Res
 pub(crate) fn print_error(error: &anyhow::Error, format: OutputFormat) {
     match format {
         OutputFormat::Json => {
-            println!("{}", serde_json::json!({"error": error.to_string()}));
+            let chain: Vec<String> = error.chain().map(ToString::to_string).collect();
+            println!(
+                "{}",
+                serde_json::json!({
+                    "error": error.to_string(),
+                    "causes": chain,
+                })
+            );
         }
         OutputFormat::Table => {
             eprintln!("Error: {error}");
+            for cause in error.chain().skip(1) {
+                eprintln!("  caused by: {cause}");
+            }
         }
     }
 }

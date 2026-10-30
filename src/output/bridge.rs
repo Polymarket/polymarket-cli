@@ -1,4 +1,4 @@
-use polymarket_client_sdk::bridge::types::{
+use polymarket_client_sdk_v2::bridge::types::{
     DepositResponse, DepositTransactionStatus, StatusResponse, SupportedAssetsResponse,
 };
 use serde_json::json;
@@ -73,7 +73,7 @@ pub fn print_supported_assets(
             println!("{table}");
         }
         OutputFormat::Json => {
-            let data: Vec<_> = response
+            let assets: Vec<_> = response
                 .supported_assets
                 .iter()
                 .map(|a| {
@@ -88,6 +88,10 @@ pub fn print_supported_assets(
                     })
                 })
                 .collect();
+            let data = json!({
+                "supported_assets": assets,
+                "note": response.note,
+            });
             super::print_json(&data)?;
         }
     }

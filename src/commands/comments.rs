@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::gamma::{
+use polymarket_client_sdk_v2::gamma::{
     self,
     types::{
         ParentEntityType,
@@ -55,7 +55,7 @@ pub enum CommentsCommand {
     /// List comments by a user's wallet address
     ByUser {
         /// Wallet address (0x...)
-        address: polymarket_client_sdk::types::Address,
+        address: polymarket_client_sdk_v2::types::Address,
 
         /// Max results
         #[arg(long, default_value = "25")]

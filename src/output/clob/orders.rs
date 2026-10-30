@@ -1,4 +1,4 @@
-use polymarket_client_sdk::clob::types::response::{
+use polymarket_client_sdk_v2::clob::types::response::{
     CancelOrdersResponse, OpenOrderResponse, OrderScoringResponse, OrdersScoringResponse, Page,
     PostOrderResponse, TradeResponse,
 };
@@ -60,12 +60,15 @@ pub fn print_orders(result: &Page<OpenOrderResponse>, output: &OutputFormat) -> 
                     json!({
                         "id": o.id,
                         "status": o.status.to_string(),
+                        "owner": o.owner.to_string(),
+                        "maker_address": o.maker_address.to_string(),
                         "market": o.market.to_string(),
                         "asset_id": o.asset_id.to_string(),
                         "side": o.side.to_string(),
                         "price": o.price.to_string(),
                         "original_size": o.original_size.to_string(),
                         "size_matched": o.size_matched.to_string(),
+                        "associate_trades": o.associate_trades,
                         "outcome": o.outcome,
                         "order_type": o.order_type.to_string(),
                         "created_at": o.created_at.to_rfc3339(),
@@ -273,9 +276,25 @@ pub fn print_trades(result: &Page<TradeResponse>, output: &OutputFormat) -> anyh
                         "fee_rate_bps": t.fee_rate_bps.to_string(),
                         "status": t.status.to_string(),
                         "match_time": t.match_time.to_rfc3339(),
+                        "last_update": t.last_update.to_rfc3339(),
                         "outcome": t.outcome,
+                        "bucket_index": t.bucket_index,
+                        "owner": t.owner.to_string(),
+                        "maker_address": t.maker_address.to_string(),
+                        "maker_orders": t.maker_orders.iter().map(|m| json!({
+                            "order_id": m.order_id,
+                            "owner": m.owner.to_string(),
+                            "maker_address": m.maker_address.to_string(),
+                            "matched_amount": m.matched_amount.to_string(),
+                            "price": m.price.to_string(),
+                            "fee_rate_bps": m.fee_rate_bps.to_string(),
+                            "asset_id": m.asset_id.to_string(),
+                            "outcome": m.outcome,
+                            "side": m.side.to_string(),
+                        })).collect::<Vec<_>>(),
                         "trader_side": format!("{:?}", t.trader_side),
                         "transaction_hash": t.transaction_hash.to_string(),
+                        "error_msg": t.error_msg,
                     })
                 })
                 .collect();

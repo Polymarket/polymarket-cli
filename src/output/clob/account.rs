@@ -1,10 +1,10 @@
-use polymarket_client_sdk::auth::Credentials;
-use polymarket_client_sdk::clob::types::response::{
+use polymarket_client_sdk_v2::auth::Credentials;
+use polymarket_client_sdk_v2::clob::types::response::{
     ApiKeysResponse, BalanceAllowanceResponse, BanStatusResponse, CurrentRewardResponse,
     GeoblockResponse, MarketRewardResponse, NotificationResponse, Page, RewardsPercentagesResponse,
     TotalUserEarningResponse, UserEarningResponse, UserRewardsEarningResponse,
 };
-use polymarket_client_sdk::types::Decimal;
+use polymarket_client_sdk_v2::types::Decimal;
 use serde_json::json;
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
@@ -58,7 +58,7 @@ pub fn print_balance(
     is_collateral: bool,
     output: &OutputFormat,
 ) -> anyhow::Result<()> {
-    let divisor = Decimal::from(10u64.pow(crate::commands::USDC_DECIMALS));
+    let divisor = Decimal::from(10u64.pow(crate::commands::COLLATERAL_DECIMALS));
     let human_balance = result.balance / divisor;
     match output {
         OutputFormat::Table => {
@@ -132,15 +132,28 @@ pub fn print_notifications(
                 .map(|n| {
                     json!({
                         "type": n.r#type,
-                        "question": n.payload.question,
-                        "side": n.payload.side.to_string(),
-                        "price": n.payload.price.to_string(),
-                        "outcome": n.payload.outcome,
-                        "matched_size": n.payload.matched_size.to_string(),
-                        "original_size": n.payload.original_size.to_string(),
-                        "order_id": n.payload.order_id,
-                        "trade_id": n.payload.trade_id,
+                        "owner": n.owner.to_string(),
+                        "asset_id": n.payload.asset_id.to_string(),
+                        "condition_id": n.payload.condition_id.to_string(),
+                        "event_slug": n.payload.event_slug,
+                        "icon": n.payload.icon,
+                        "image": n.payload.image,
                         "market": n.payload.market.to_string(),
+                        "market_slug": n.payload.market_slug,
+                        "matched_size": n.payload.matched_size.to_string(),
+                        "order_id": n.payload.order_id,
+                        "original_size": n.payload.original_size.to_string(),
+                        "outcome": n.payload.outcome,
+                        "outcome_index": n.payload.outcome_index,
+                        "owner_payload": n.payload.owner.to_string(),
+                        "price": n.payload.price.to_string(),
+                        "question": n.payload.question,
+                        "remaining_size": n.payload.remaining_size.to_string(),
+                        "series_slug": n.payload.series_slug,
+                        "side": n.payload.side.to_string(),
+                        "trade_id": n.payload.trade_id,
+                        "transaction_hash": n.payload.transaction_hash.to_string(),
+                        "order_type": n.payload.order_type.to_string(),
                     })
                 })
                 .collect();
@@ -249,12 +262,12 @@ pub fn print_earnings(
 }
 
 pub fn print_user_earnings_markets(
-    result: &[UserRewardsEarningResponse],
+    result: &Page<UserRewardsEarningResponse>,
     output: &OutputFormat,
 ) -> anyhow::Result<()> {
     match output {
         OutputFormat::Table => {
-            if result.is_empty() {
+            if result.data.is_empty() {
                 println!("No earnings data found.");
                 return Ok(());
             }
@@ -272,6 +285,7 @@ pub fn print_user_earnings_markets(
                 min_size: String,
             }
             let rows: Vec<Row> = result
+                .data
                 .iter()
                 .map(|e| Row {
                     question: truncate(&e.question, 40),
@@ -283,9 +297,13 @@ pub fn print_user_earnings_markets(
                 .collect();
             let table = Table::new(rows).with(Style::rounded()).to_string();
             println!("{table}");
+            if result.next_cursor != END_CURSOR {
+                println!("Next cursor: {}", result.next_cursor);
+            }
         }
         OutputFormat::Json => {
             let data: Vec<_> = result
+                .data
                 .iter()
                 .map(|e| {
                     json!({
@@ -293,6 +311,7 @@ pub fn print_user_earnings_markets(
                         "question": e.question,
                         "market_slug": e.market_slug,
                         "event_slug": e.event_slug,
+                        "image": e.image,
                         "earning_percentage": e.earning_percentage.to_string(),
                         "rewards_max_spread": e.rewards_max_spread.to_string(),
                         "rewards_min_size": e.rewards_min_size.to_string(),
@@ -319,7 +338,8 @@ pub fn print_user_earnings_markets(
                     })
                 })
                 .collect();
-            crate::output::print_json(&data)?;
+            let wrapper = json!({"data": data, "next_cursor": result.next_cursor});
+            crate::output::print_json(&wrapper)?;
         }
     }
     Ok(())
@@ -467,6 +487,7 @@ pub fn print_market_reward(
                         "question": r.question,
                         "market_slug": r.market_slug,
                         "event_slug": r.event_slug,
+                        "image": r.image,
                         "rewards_max_spread": r.rewards_max_spread.to_string(),
                         "rewards_min_size": r.rewards_min_size.to_string(),
                         "market_competitiveness": r.market_competitiveness.to_string(),

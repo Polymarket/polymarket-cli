@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::gamma::{
+use polymarket_client_sdk_v2::gamma::{
     self,
     types::request::{
         RelatedTagsByIdRequest, RelatedTagsBySlugRequest, TagByIdRequest, TagBySlugRequest,

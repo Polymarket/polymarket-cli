@@ -1,4 +1,4 @@
-use polymarket_client_sdk::gamma::types::response::{RelatedTag, Tag};
+use polymarket_client_sdk_v2::gamma::types::response::{RelatedTag, Tag};
 use tabled::settings::Style;
 use tabled::{Table, Tabled};
 

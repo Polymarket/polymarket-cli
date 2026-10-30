@@ -1,4 +1,4 @@
-use polymarket_client_sdk::data::types::response::{
+use polymarket_client_sdk_v2::data::types::response::{
     Activity, BuilderLeaderboardEntry, BuilderVolumeEntry, ClosedPosition, LiveVolume, Market,
     MetaHolder, OpenInterest, Position, Trade, Traded, TraderLeaderboardEntry, Value,
 };
@@ -59,20 +59,30 @@ pub fn print_positions(positions: &[Position], output: &OutputFormat) -> anyhow:
                     json!({
                         "title": p.title,
                         "slug": p.slug,
+                        "icon": p.icon,
+                        "event_slug": p.event_slug,
+                        "event_id": p.event_id,
                         "outcome": p.outcome,
                         "outcome_index": p.outcome_index,
+                        "opposite_outcome": p.opposite_outcome,
+                        "opposite_asset": p.opposite_asset.to_string(),
+                        "asset": p.asset.to_string(),
                         "size": p.size.to_string(),
                         "avg_price": p.avg_price.to_string(),
                         "initial_value": p.initial_value.to_string(),
                         "current_value": p.current_value.to_string(),
                         "cash_pnl": p.cash_pnl.to_string(),
                         "percent_pnl": p.percent_pnl.to_string(),
+                        "total_bought": p.total_bought.to_string(),
                         "realized_pnl": p.realized_pnl.to_string(),
+                        "percent_realized_pnl": p.percent_realized_pnl.to_string(),
                         "cur_price": p.cur_price.to_string(),
                         "condition_id": p.condition_id.to_string(),
                         "proxy_wallet": p.proxy_wallet.to_string(),
                         "redeemable": p.redeemable,
                         "mergeable": p.mergeable,
+                        "end_date": p.end_date.map(|d| d.to_string()),
+                        "negative_risk": p.negative_risk,
                     })
                 })
                 .collect();
@@ -122,8 +132,13 @@ pub fn print_closed_positions(
                     json!({
                         "title": p.title,
                         "slug": p.slug,
+                        "icon": p.icon,
+                        "event_slug": p.event_slug,
                         "outcome": p.outcome,
                         "outcome_index": p.outcome_index,
+                        "opposite_outcome": p.opposite_outcome,
+                        "opposite_asset": p.opposite_asset.to_string(),
+                        "asset": p.asset.to_string(),
                         "avg_price": p.avg_price.to_string(),
                         "total_bought": p.total_bought.to_string(),
                         "realized_pnl": p.realized_pnl.to_string(),
@@ -131,6 +146,7 @@ pub fn print_closed_positions(
                         "condition_id": p.condition_id.to_string(),
                         "proxy_wallet": p.proxy_wallet.to_string(),
                         "timestamp": p.timestamp,
+                        "end_date": p.end_date.date_naive().to_string(),
                     })
                 })
                 .collect();
@@ -228,15 +244,23 @@ pub fn print_trades(trades: &[Trade], output: &OutputFormat) -> anyhow::Result<(
                     json!({
                         "title": t.title,
                         "slug": t.slug,
+                        "icon": t.icon,
+                        "event_slug": t.event_slug,
                         "side": t.side.to_string(),
                         "outcome": t.outcome,
                         "outcome_index": t.outcome_index,
+                        "asset": t.asset.to_string(),
                         "size": t.size.to_string(),
                         "price": t.price.to_string(),
                         "timestamp": t.timestamp,
                         "condition_id": t.condition_id.to_string(),
                         "proxy_wallet": t.proxy_wallet.to_string(),
                         "transaction_hash": t.transaction_hash.to_string(),
+                        "name": t.name,
+                        "pseudonym": t.pseudonym,
+                        "bio": t.bio,
+                        "profile_image": t.profile_image,
+                        "profile_image_optimized": t.profile_image_optimized,
                     })
                 })
                 .collect();
@@ -259,9 +283,15 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
                 activity_type: String,
                 #[tabled(rename = "Market")]
                 title: String,
+                #[tabled(rename = "Side")]
+                side: String,
+                #[tabled(rename = "Outcome")]
+                outcome: String,
+                #[tabled(rename = "Price")]
+                price: String,
                 #[tabled(rename = "Size")]
                 size: String,
-                #[tabled(rename = "USDC")]
+                #[tabled(rename = "Collateral")]
                 usdc_size: String,
                 #[tabled(rename = "Tx")]
                 tx: String,
@@ -271,6 +301,9 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
                 .map(|a| Row {
                     activity_type: a.activity_type.to_string(),
                     title: truncate(a.title.as_deref().unwrap_or(DASH), 35),
+                    side: a.side.as_ref().map(|s| s.to_string()).unwrap_or_default(),
+                    outcome: a.outcome.as_deref().unwrap_or(DASH).into(),
+                    price: a.price.map(|p| format!("{:.4}", p)).unwrap_or_default(),
                     size: format!("{:.2}", a.size),
                     usdc_size: format_decimal(a.usdc_size),
                     tx: truncate(&a.transaction_hash.to_string(), 14),
@@ -286,11 +319,25 @@ pub fn print_activity(activity: &[Activity], output: &OutputFormat) -> anyhow::R
                     json!({
                         "activity_type": a.activity_type.to_string(),
                         "title": a.title,
+                        "slug": a.slug,
+                        "icon": a.icon,
+                        "event_slug": a.event_slug,
+                        "side": a.side.as_ref().map(|s| s.to_string()),
+                        "outcome": a.outcome,
+                        "outcome_index": a.outcome_index,
+                        "price": a.price.map(|p| p.to_string()),
+                        "asset": a.asset.map(|a| a.to_string()),
+                        "condition_id": a.condition_id.map(|c| c.to_string()),
                         "size": a.size.to_string(),
                         "usdc_size": a.usdc_size.to_string(),
                         "timestamp": a.timestamp,
                         "transaction_hash": a.transaction_hash.to_string(),
                         "proxy_wallet": a.proxy_wallet.to_string(),
+                        "name": a.name,
+                        "pseudonym": a.pseudonym,
+                        "bio": a.bio,
+                        "profile_image": a.profile_image,
+                        "profile_image_optimized": a.profile_image_optimized,
                     })
                 })
                 .collect();
@@ -349,8 +396,14 @@ pub fn print_holders(meta_holders: &[MetaHolder], output: &OutputFormat) -> anyh
                                 "proxy_wallet": h.proxy_wallet.to_string(),
                                 "name": h.name,
                                 "pseudonym": h.pseudonym,
+                                "bio": h.bio,
+                                "asset": h.asset.to_string(),
                                 "amount": h.amount.to_string(),
                                 "outcome_index": h.outcome_index,
+                                "display_username_public": h.display_username_public,
+                                "profile_image": h.profile_image,
+                                "profile_image_optimized": h.profile_image_optimized,
+                                "verified": h.verified,
                             })
                         })
                         .collect();
@@ -487,6 +540,9 @@ pub fn print_leaderboard(
                         "user_name": e.user_name,
                         "pnl": e.pnl.to_string(),
                         "volume": e.vol.to_string(),
+                        "profile_image": e.profile_image,
+                        "x_username": e.x_username,
+                        "verified_badge": e.verified_badge,
                     })
                 })
                 .collect();
@@ -539,6 +595,7 @@ pub fn print_builder_leaderboard(
                         "volume": e.volume.to_string(),
                         "active_users": e.active_users,
                         "verified": e.verified,
+                        "builder_logo": e.builder_logo,
                     })
                 })
                 .collect();
@@ -591,6 +648,7 @@ pub fn print_builder_volume(
                     json!({
                         "date": e.dt.to_rfc3339(),
                         "builder": e.builder,
+                        "builder_logo": e.builder_logo,
                         "volume": e.volume.to_string(),
                         "active_users": e.active_users,
                         "rank": e.rank,

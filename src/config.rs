@@ -201,7 +201,7 @@ pub fn resolve_key(cli_flag: Option<&str>) -> Result<(Option<String>, KeySource)
 
 /// Decrypt the keystore file and return the private key hex.
 fn decrypt_keystore() -> Result<String> {
-    use polymarket_client_sdk::auth::LocalSigner;
+    use polymarket_client_sdk_v2::auth::LocalSigner;
 
     let ks_dir = keystore_dir()?;
     let entry = fs::read_dir(&ks_dir)

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::bridge::{
+use polymarket_client_sdk_v2::bridge::{
     self,
     types::{DepositRequest, StatusRequest},
 };
@@ -19,7 +19,7 @@ pub enum BridgeCommand {
     /// Get deposit addresses for a wallet (EVM, Solana, Bitcoin)
     Deposit {
         /// Polymarket wallet address (0x...)
-        address: polymarket_client_sdk::types::Address,
+        address: polymarket_client_sdk_v2::types::Address,
     },
 
     /// List supported chains and tokens for deposits

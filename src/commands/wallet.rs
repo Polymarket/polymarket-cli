@@ -3,9 +3,9 @@ use std::str::FromStr;
 use alloy::signers::local::PrivateKeySigner;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::auth::LocalSigner;
-use polymarket_client_sdk::auth::Signer as _;
-use polymarket_client_sdk::{POLYGON, derive_proxy_wallet};
+use polymarket_client_sdk_v2::auth::LocalSigner;
+use polymarket_client_sdk_v2::auth::Signer as _;
+use polymarket_client_sdk_v2::{POLYGON, derive_proxy_wallet};
 
 use crate::config;
 use crate::output::OutputFormat;
@@ -134,11 +134,11 @@ fn save_encrypted(signer: &PrivateKeySigner, password: &str, signature_type: &st
 
 /// Remove any leftover keystore files (e.g. when switching from encrypted to plaintext).
 fn cleanup_keystore_files() {
-    if let Ok(ks_dir) = config::keystore_dir() {
-        if let Ok(entries) = std::fs::read_dir(&ks_dir) {
-            for entry in entries.flatten() {
-                let _ = std::fs::remove_file(entry.path());
-            }
+    if let Ok(ks_dir) = config::keystore_dir()
+        && let Ok(entries) = std::fs::read_dir(&ks_dir)
+    {
+        for entry in entries.flatten() {
+            let _ = std::fs::remove_file(entry.path());
         }
     }
 }

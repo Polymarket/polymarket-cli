@@ -16,8 +16,7 @@ use crate::output::clob::{
 use anyhow::Result;
 use chrono::NaiveDate;
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::clob;
-use polymarket_client_sdk::clob::types::{
+use polymarket_client_sdk_v2::clob::types::{
     Amount, AssetType, Interval, OrderType, Side, TimeRange,
     request::{
         BalanceAllowanceRequest, CancelMarketOrderRequest, DeleteNotificationsRequest,
@@ -25,7 +24,7 @@ use polymarket_client_sdk::clob::types::{
         PriceHistoryRequest, PriceRequest, SpreadRequest, TradesRequest, UserRewardsEarningRequest,
     },
 };
-use polymarket_client_sdk::types::{B256, Decimal, U256};
+use polymarket_client_sdk_v2::types::{B256, Decimal, U256};
 
 #[derive(Args)]
 pub struct ClobArgs {
@@ -245,7 +244,7 @@ pub enum ClobCommand {
         /// Side: buy or sell
         #[arg(long)]
         side: CliSide,
-        /// Amount (USDC for buys, shares for sells)
+        /// Amount (pUSD for buys, shares for sells)
         #[arg(long)]
         amount: String,
         /// Order type: FOK or FAK (default: FOK)
@@ -493,7 +492,7 @@ pub async fn execute(
     signature_type: Option<&str>,
 ) -> Result<()> {
     // Unauthenticated client — cheap to construct, used by read commands and CreateApiKey.
-    let unauth = clob::Client::default();
+    let unauth = auth::unauthenticated_clob_client()?;
     let output = &output;
 
     match args.command {
@@ -686,8 +685,11 @@ pub async fn execute(
                 .post_only(post_only)
                 .build()
                 .await?;
-            let order = client.sign(&signer, order).await?;
-            let result = client.post_order(order).await?;
+            let signed_order = client.sign(&signer, order).await?;
+            let mut results = client.post_orders(vec![signed_order]).await?;
+            let result = results
+                .pop()
+                .ok_or_else(|| anyhow::anyhow!("Order submission returned no result"))?;
             print_post_order_result(&result, output)?;
         }
 
@@ -765,8 +767,11 @@ pub async fn execute(
                 .order_type(OrderType::from(order_type))
                 .build()
                 .await?;
-            let order = client.sign(&signer, order).await?;
-            let result = client.post_order(order).await?;
+            let signed_order = client.sign(&signer, order).await?;
+            let mut results = client.post_orders(vec![signed_order]).await?;
+            let result = results
+                .pop()
+                .ok_or_else(|| anyhow::anyhow!("Order submission returned no result"))?;
             print_post_order_result(&result, output)?;
         }
 

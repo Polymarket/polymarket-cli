@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use polymarket_client_sdk::data::{
+use polymarket_client_sdk_v2::data::{
     self,
     types::request::{
         ActivityRequest, BuilderLeaderboardRequest, BuilderVolumeRequest, ClosedPositionsRequest,
@@ -8,7 +8,7 @@ use polymarket_client_sdk::data::{
         TraderLeaderboardRequest, TradesRequest, ValueRequest,
     },
 };
-use polymarket_client_sdk::types::{Address, B256};
+use polymarket_client_sdk_v2::types::{Address, B256};
 
 use crate::output::OutputFormat;
 use crate::output::data::{
@@ -165,7 +165,7 @@ pub enum TimePeriod {
     All,
 }
 
-impl From<TimePeriod> for polymarket_client_sdk::data::types::TimePeriod {
+impl From<TimePeriod> for polymarket_client_sdk_v2::data::types::TimePeriod {
     fn from(v: TimePeriod) -> Self {
         match v {
             TimePeriod::Day => Self::Day,
@@ -182,7 +182,7 @@ pub enum OrderBy {
     Vol,
 }
 
-impl From<OrderBy> for polymarket_client_sdk::data::types::LeaderboardOrderBy {
+impl From<OrderBy> for polymarket_client_sdk_v2::data::types::LeaderboardOrderBy {
     fn from(v: OrderBy) -> Self {
         match v {
             OrderBy::Pnl => Self::Pnl,

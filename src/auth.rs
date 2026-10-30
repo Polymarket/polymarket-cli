@@ -2,14 +2,19 @@ use std::str::FromStr;
 
 use alloy::providers::ProviderBuilder;
 use anyhow::{Context, Result};
-use polymarket_client_sdk::auth::state::Authenticated;
-use polymarket_client_sdk::auth::{LocalSigner, Normal, Signer as _};
-use polymarket_client_sdk::clob::types::SignatureType;
-use polymarket_client_sdk::{POLYGON, clob};
+use polymarket_client_sdk_v2::auth::state::Authenticated;
+use polymarket_client_sdk_v2::auth::{LocalSigner, Normal, Signer as _};
+use polymarket_client_sdk_v2::clob::types::SignatureType;
+use polymarket_client_sdk_v2::{POLYGON, clob};
 
 use crate::config;
 
+const DEFAULT_CLOB_HOST: &str = "https://clob.polymarket.com";
 const DEFAULT_RPC_URL: &str = "https://polygon.drpc.org";
+
+fn clob_host() -> String {
+    std::env::var("POLYMARKET_CLOB_HOST").unwrap_or_else(|_| DEFAULT_CLOB_HOST.to_string())
+}
 
 fn rpc_url() -> String {
     std::env::var("POLYMARKET_RPC_URL").unwrap_or_else(|_| DEFAULT_RPC_URL.to_string())
@@ -25,7 +30,7 @@ fn parse_signature_type(s: &str) -> SignatureType {
 
 pub fn resolve_signer(
     private_key: Option<&str>,
-) -> Result<impl polymarket_client_sdk::auth::Signer> {
+) -> Result<impl polymarket_client_sdk_v2::auth::Signer> {
     let (key, _) = config::resolve_key(private_key)?;
     let key = key.ok_or_else(|| anyhow::anyhow!("{}", config::NO_WALLET_MSG))?;
     LocalSigner::from_str(&key)
@@ -42,17 +47,22 @@ pub async fn authenticated_clob_client(
 }
 
 pub async fn authenticate_with_signer(
-    signer: &(impl polymarket_client_sdk::auth::Signer + Sync),
+    signer: &(impl polymarket_client_sdk_v2::auth::Signer + Sync),
     signature_type_flag: Option<&str>,
 ) -> Result<clob::Client<Authenticated<Normal>>> {
     let sig_type = parse_signature_type(&config::resolve_signature_type(signature_type_flag)?);
 
-    clob::Client::default()
+    unauthenticated_clob_client()?
         .authentication_builder(signer)
         .signature_type(sig_type)
         .authenticate()
         .await
         .context("Failed to authenticate with Polymarket CLOB")
+}
+
+pub fn unauthenticated_clob_client() -> Result<clob::Client> {
+    clob::Client::new(&clob_host(), clob::Config::default())
+        .context("Failed to create Polymarket CLOB client")
 }
 
 pub async fn create_readonly_provider() -> Result<impl alloy::providers::Provider + Clone> {

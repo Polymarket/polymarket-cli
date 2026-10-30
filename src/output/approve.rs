@@ -8,9 +8,9 @@ use super::OutputFormat;
 pub struct ApprovalStatus {
     pub contract_name: String,
     pub contract_address: String,
-    pub usdc_allowance: U256,
-    pub ctf_approved: bool,
-    pub usdc_error: Option<String>,
+    pub collateral_allowance: U256,
+    pub ctf_approved: Option<bool>,
+    pub collateral_error: Option<String>,
     pub ctf_error: Option<String>,
 }
 
@@ -18,8 +18,8 @@ pub struct ApprovalStatus {
 struct ApprovalRow {
     #[tabled(rename = "Contract")]
     contract: String,
-    #[tabled(rename = "USDC")]
-    usdc: String,
+    #[tabled(rename = "pUSD")]
+    collateral: String,
     #[tabled(rename = "CTF Tokens")]
     ctf: String,
 }
@@ -30,17 +30,17 @@ fn format_allowance(allowance: U256) -> String {
     } else if allowance == U256::ZERO {
         "\u{2717} None".to_string()
     } else {
-        let usdc_decimals = U256::from(1_000_000);
-        let whole = allowance / usdc_decimals;
-        format!("\u{2713} {whole} USDC")
+        let collateral_decimals = U256::from(10u64.pow(crate::commands::COLLATERAL_DECIMALS));
+        let whole = allowance / collateral_decimals;
+        format!("\u{2713} {whole} {}", crate::commands::COLLATERAL_SYMBOL)
     }
 }
 
-fn format_ctf(approved: bool) -> String {
-    if approved {
-        "\u{2713} Approved".to_string()
-    } else {
-        "\u{2717} Not set".to_string()
+fn format_ctf(approved: Option<bool>) -> String {
+    match approved {
+        Some(true) => "\u{2713} Approved".to_string(),
+        Some(false) => "\u{2717} Not set".to_string(),
+        None => "N/A".to_string(),
     }
 }
 
@@ -53,12 +53,14 @@ pub fn print_approval_status(statuses: &[ApprovalStatus], output: &OutputFormat)
                     let mut obj = serde_json::json!({
                         "contract": s.contract_name,
                         "address": s.contract_address,
-                        "usdc_allowance": s.usdc_allowance.to_string(),
-                        "usdc_approved": s.usdc_allowance > U256::ZERO,
+                        "collateral": crate::commands::COLLATERAL_SYMBOL,
+                        "collateral_allowance": s.collateral_allowance.to_string(),
+                        "collateral_approved": s.collateral_allowance > U256::ZERO,
+                        "ctf_required": s.ctf_approved.is_some(),
                         "ctf_approved": s.ctf_approved,
                     });
-                    if let Some(ref err) = s.usdc_error {
-                        obj["usdc_error"] = serde_json::Value::String(err.clone());
+                    if let Some(ref err) = s.collateral_error {
+                        obj["collateral_error"] = serde_json::Value::String(err.clone());
                     }
                     if let Some(ref err) = s.ctf_error {
                         obj["ctf_error"] = serde_json::Value::String(err.clone());
@@ -74,10 +76,10 @@ pub fn print_approval_status(statuses: &[ApprovalStatus], output: &OutputFormat)
                 .iter()
                 .map(|s| ApprovalRow {
                     contract: s.contract_name.clone(),
-                    usdc: if let Some(ref err) = s.usdc_error {
+                    collateral: if let Some(ref err) = s.collateral_error {
                         format!("\u{2717} RPC error: {err}")
                     } else {
-                        format_allowance(s.usdc_allowance)
+                        format_allowance(s.collateral_allowance)
                     },
                     ctf: if let Some(ref err) = s.ctf_error {
                         format!("\u{2717} RPC error: {err}")
