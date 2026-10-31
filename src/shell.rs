@@ -42,6 +42,7 @@ pub async fn run_shell() -> anyhow::Result<()> {
                         if let Err(e) = crate::run(cli).await {
                             crate::output::print_error(&e, output);
                         }
+                        crate::config::forget_unlocked_key();
                     }
                     Err(e) => {
                         let _ = e.print();
