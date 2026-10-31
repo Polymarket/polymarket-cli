@@ -486,3 +486,36 @@ fn wallet_address_succeeds_or_fails_gracefully() {
     // Either succeeds or fails with an error message — not a panic
     assert!(output.status.success() || !output.stderr.is_empty());
 }
+
+#[test]
+fn encrypted_wallet_reads_its_own_keystore_file() {
+    let home = std::env::temp_dir().join(format!("polymarket-keystore-{}", std::process::id()));
+    let wallet = |args: &[&str]| {
+        let mut cmd = polymarket();
+        cmd.env("HOME", &home)
+            .env("POLYMARKET_PASSWORD", "test password")
+            .args(["-o", "json", "wallet"])
+            .args(args);
+        cmd.assert().success().get_output().stdout.clone()
+    };
+    let address = |stdout: Vec<u8>| -> String {
+        let json: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
+        json["address"].as_str().unwrap().to_string()
+    };
+
+    wallet(&["create"]);
+    let replaced = address(wallet(&["create", "--force"]));
+
+    // Overwriting leaves exactly one keystore, and files that sort or list
+    // ahead of it are never picked up.
+    let keystore_dir = home.join(".config/polymarket/keystore");
+    let files: Vec<_> = std::fs::read_dir(&keystore_dir).unwrap().collect();
+    assert_eq!(files.len(), 1);
+    std::fs::write(keystore_dir.join(".DS_Store"), "not a keystore").unwrap();
+    std::fs::write(keystore_dir.join("0-stale.json"), "{}").unwrap();
+
+    let unlocked = address(wallet(&["address"]));
+    let _ = std::fs::remove_dir_all(&home);
+
+    assert_eq!(unlocked, replaced);
+}

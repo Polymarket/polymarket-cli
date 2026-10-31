@@ -100,33 +100,27 @@ fn save_encrypted(signer: &PrivateKeySigner, password: &str, signature_type: &st
     std::fs::create_dir_all(&tmp_dir).context("Failed to create temp keystore dir")?;
 
     let mut rng = rand::thread_rng();
-    PrivateKeySigner::encrypt_keystore(&tmp_dir, &mut rng, signer.to_bytes(), password, None)
-        .context("Failed to encrypt keystore")?;
+    PrivateKeySigner::encrypt_keystore(
+        &tmp_dir,
+        &mut rng,
+        signer.to_bytes(),
+        password,
+        Some(config::KEYSTORE_FILE),
+    )
+    .context("Failed to encrypt keystore")?;
 
-    // Find the newly written keystore file
-    let new_file = std::fs::read_dir(&tmp_dir)?
-        .flatten()
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("encrypt_keystore produced no file"))?
-        .path();
-    let file_name = new_file
-        .file_name()
-        .ok_or_else(|| anyhow::anyhow!("keystore file has no name"))?
-        .to_owned();
-
-    // Now safe to remove old keystore files
+    // Replace the old keystore in one step, then clear anything else left behind
+    let keystore_path = ks_dir.join(config::KEYSTORE_FILE);
+    std::fs::rename(tmp_dir.join(config::KEYSTORE_FILE), &keystore_path)
+        .context("Failed to move keystore into place")?;
     if let Ok(entries) = std::fs::read_dir(&ks_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path != tmp_dir {
+            if path != tmp_dir && path != keystore_path {
                 let _ = std::fs::remove_file(&path);
             }
         }
     }
-
-    // Move new keystore into place and clean up temp dir
-    std::fs::rename(&new_file, ks_dir.join(&file_name))
-        .context("Failed to move keystore into place")?;
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
     config::save_wallet_encrypted(POLYGON, signature_type)

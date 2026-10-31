@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,12 @@ const ENV_VAR: &str = "POLYMARKET_PRIVATE_KEY";
 const SIG_TYPE_ENV_VAR: &str = "POLYMARKET_SIGNATURE_TYPE";
 const PASSWORD_ENV_VAR: &str = "POLYMARKET_PASSWORD";
 pub(crate) const DEFAULT_SIGNATURE_TYPE: &str = "proxy";
+/// The one file in `keystore_dir()` that holds the wallet.
+pub(crate) const KEYSTORE_FILE: &str = "wallet.json";
+
+/// The decrypted key, kept for the rest of the command so that a command that
+/// resolves the key several times asks for the password once.
+static UNLOCKED_KEY: Mutex<Option<String>> = Mutex::new(None);
 
 pub(crate) const NO_WALLET_MSG: &str =
     "No wallet configured. Run `polymarket wallet create` or `polymarket wallet import <key>`";
@@ -122,6 +129,8 @@ pub fn resolve_signature_type(cli_flag: Option<&str>) -> Result<String> {
 }
 
 fn write_config_file(config: &Config) -> Result<()> {
+    forget_unlocked_key();
+
     let dir = config_dir()?;
     fs::create_dir_all(&dir).context("Failed to create config directory")?;
 
@@ -191,7 +200,7 @@ pub fn resolve_key(cli_flag: Option<&str>) -> Result<(Option<String>, KeySource)
     }
     if let Some(config) = load_config()? {
         if config.encrypted {
-            let key = decrypt_keystore()?;
+            let key = unlocked_key()?;
             return Ok((Some(key), KeySource::ConfigFile));
         }
         return Ok((Some(config.private_key), KeySource::ConfigFile));
@@ -199,19 +208,33 @@ pub fn resolve_key(cli_flag: Option<&str>) -> Result<(Option<String>, KeySource)
     Ok((None, KeySource::None))
 }
 
+/// Drop the decrypted key, so the next command has to unlock the wallet again.
+pub fn forget_unlocked_key() {
+    *UNLOCKED_KEY.lock().unwrap_or_else(PoisonError::into_inner) = None;
+}
+
+fn unlocked_key() -> Result<String> {
+    let mut unlocked = UNLOCKED_KEY.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(key) = unlocked.as_ref() {
+        return Ok(key.clone());
+    }
+    let key = decrypt_keystore()?;
+    *unlocked = Some(key.clone());
+    Ok(key)
+}
+
 /// Decrypt the keystore file and return the private key hex.
 fn decrypt_keystore() -> Result<String> {
     use polymarket_client_sdk_v2::auth::LocalSigner;
 
-    let ks_dir = keystore_dir()?;
-    let entry = fs::read_dir(&ks_dir)
-        .context("Failed to read keystore directory")?
-        .flatten()
-        .find(|e| e.path().is_file())
-        .context("No keystore file found. Config says encrypted but keystore is missing.")?;
+    let path = keystore_dir()?.join(KEYSTORE_FILE);
+    anyhow::ensure!(
+        path.is_file(),
+        "No keystore file found. Config says encrypted but keystore is missing."
+    );
 
     let password = read_password("Enter password to unlock wallet: ")?;
-    let signer = LocalSigner::decrypt_keystore(entry.path(), password)
+    let signer = LocalSigner::decrypt_keystore(path, password)
         .context("Failed to decrypt keystore. Wrong password?")?;
     Ok(format!("{:#x}", signer.to_bytes()))
 }
@@ -286,5 +309,53 @@ mod tests {
         unsafe { unset(SIG_TYPE_ENV_VAR) };
         let result = resolve_signature_type(None).unwrap();
         assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn encrypted_wallet_unlocks_once_per_command() {
+        use alloy::signers::local::PrivateKeySigner;
+
+        let _lock = ENV_LOCK.lock().unwrap();
+        let original_home = std::env::var_os("HOME");
+        let home = std::env::temp_dir().join(format!("polymarket-unlock-{}", std::process::id()));
+        unsafe {
+            set("HOME", home.to_str().unwrap());
+            unset(ENV_VAR);
+            set(PASSWORD_ENV_VAR, "right");
+        }
+        forget_unlocked_key();
+
+        let ks_dir = keystore_dir().unwrap();
+        fs::create_dir_all(&ks_dir).unwrap();
+        let key = [7u8; 32];
+        PrivateKeySigner::encrypt_keystore(
+            &ks_dir,
+            &mut rand::thread_rng(),
+            key,
+            "right",
+            Some(KEYSTORE_FILE),
+        )
+        .unwrap();
+        save_wallet_encrypted(137, DEFAULT_SIGNATURE_TYPE).unwrap();
+
+        let (first, _) = resolve_key(None).unwrap();
+
+        // A second resolve must not reach the keystore, so a wrong password
+        // cannot fail it. After the key is forgotten, the keystore is used again.
+        unsafe { set(PASSWORD_ENV_VAR, "wrong") };
+        let (second, _) = resolve_key(None).unwrap();
+        forget_unlocked_key();
+        let relocked = resolve_key(None);
+
+        unsafe { unset(PASSWORD_ENV_VAR) };
+        match original_home {
+            Some(value) => unsafe { std::env::set_var("HOME", value) },
+            None => unsafe { unset("HOME") },
+        }
+        let _ = fs::remove_dir_all(&home);
+
+        assert_eq!(first, second);
+        assert!(first.unwrap().ends_with(&"07".repeat(32)));
+        assert!(relocked.is_err());
     }
 }
